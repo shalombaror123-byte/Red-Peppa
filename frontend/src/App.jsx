@@ -88,6 +88,9 @@ export default function App() {
 
   const login = (user) => {
     localStorage.setItem(STORAGE_KEY, user.id)
+    setUsers((list) =>
+      list && !list.some((u) => u.id === user.id) ? [...list, user] : list
+    )
     setMe(user)
   }
 
