@@ -58,7 +58,7 @@ export default function Login({ users, error, onLogin, onRefresh, footer }) {
     <div className="page login-page">
       <div className="login-main">
         <div className="login-brand">
-          <img src="/pepper.svg" alt="Red Peppa" className="logo-big" />
+          <img src="/pepper.png" alt="Red Peppa" className="logo-big" />
           <h1>Red Peppa</h1>
           <p className="muted">The class chat — log in or join your class.</p>
         </div>

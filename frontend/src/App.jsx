@@ -122,7 +122,7 @@ export default function App() {
       <header>
         <div className="header-row">
           <h1>
-            <img src="/pepper.svg" alt="" className="logo" /> Red Peppa
+            <img src="/pepper.png" alt="" className="logo" /> Red Peppa
           </h1>
           <div className="me-chip">
             <span>{me.name}</span>
