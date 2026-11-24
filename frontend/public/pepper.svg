@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- stem -->
+  <path d="M30 17 C28 10 30 4 35 3 C38 3 40 6 39 11 L37 17 Z" fill="#2f9e44"/>
+  <!-- calyx -->
+  <path d="M20 21 C25 15 29 14 32 14 C35 14 39 15 44 21 C39 19 35 18 32 18 C29 18 25 19 20 21 Z" fill="#37b24d"/>
+  <!-- body -->
+  <path d="M19 19 C12 23 9 32 11 42 C13 54 21 60 32 60 C43 60 51 54 53 42 C55 32 52 23 45 19 C41 17 36 18 32 20 C28 18 23 17 19 19 Z" fill="#e5383b"/>
+  <!-- lobes -->
+  <path d="M32 20 C36 18 41 17 45 19 C47 29 47 46 44 55 C40 58 36 60 32 60 Z" fill="#c92e2e" opacity="0.5"/>
+  <path d="M32 20 C28 18 23 17 19 19 C17 29 17 46 20 55 C24 58 28 60 32 60 Z" fill="#c92e2e" opacity="0.3"/>
+  <!-- highlight -->
+  <ellipse cx="21" cy="37" rx="4" ry="10" fill="#ff9d97" opacity="0.8" transform="rotate(-12 21 37)"/>
+</svg>

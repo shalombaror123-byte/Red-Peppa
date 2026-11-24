@@ -1,0 +1,15 @@
+# deps & build output
+node_modules/
+dist/
+
+# python
+venv/
+__pycache__/
+*.pyc
+
+# runtime data & secrets (Vercel uses Upstash KV instead)
+data.json
+.env
+
+# os
+.DS_Store
