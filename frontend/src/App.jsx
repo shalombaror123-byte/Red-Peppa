@@ -86,7 +86,10 @@ export default function App() {
     return () => clearInterval(t)
   }, [loadUsers])
 
+  const loginAtRef = useRef(0)
+
   const login = (user) => {
+    loginAtRef.current = Date.now()
     localStorage.setItem(STORAGE_KEY, user.id)
     setUsers((list) =>
       list && !list.some((u) => u.id === user.id) ? [...list, user] : list
@@ -126,11 +129,12 @@ export default function App() {
   }
 
   // If the account was deleted/reset on the backend, send back to login
-  // instead of getting stuck on "User not found".
+  // instead of getting stuck on "User not found". Skip for 30s after
+  // sign-in so a stale in-flight users fetch can't bounce a fresh login.
   useEffect(() => {
-    if (me && users && !users.some((u) => u.id === me.id)) {
-      logout()
-    }
+    if (!me || !users || users.some((u) => u.id === me.id)) return
+    if (Date.now() - loginAtRef.current < 30_000) return
+    logout()
   }, [me, users, logout])
 
   if (!me) {
