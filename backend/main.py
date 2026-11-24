@@ -260,15 +260,6 @@ def update_user(user_id: str, update: UserUpdate):
     return public_user(user)
 
 
-@app.delete("/api/users/{user_id}", status_code=204)
-def delete_user(user_id: str):
-    with _lock:
-        data = load_data()
-        get_user_or_404(data, user_id)
-        data["users"] = [u for u in data["users"] if u["id"] != user_id]
-        save_data(data)
-
-
 # ---------- messages ----------
 
 
