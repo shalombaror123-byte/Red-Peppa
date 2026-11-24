@@ -64,7 +64,7 @@ KV_TOKEN = os.environ.get("KV_REST_API_TOKEN") or os.environ.get(
     "UPSTASH_REDIS_REST_TOKEN"
 ) or ""
 USE_KV = bool(KV_URL and KV_TOKEN)
-KV_KEY = "class-app-data"
+KV_KEY = os.environ.get("KV_KEY", "red-peppa-data")
 _KV_HEADERS = {"Authorization": f"Bearer {KV_TOKEN}"}
 
 EMPTY_DATA = {
