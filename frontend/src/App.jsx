@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import Login from './Login'
 import Chats from './Chats'
@@ -97,6 +97,31 @@ export default function App() {
     setTab('chats')
   }, [])
 
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [menuOpen])
+
+  const deleteAccount = async () => {
+    setMenuOpen(false)
+    if (!window.confirm('Delete your account? This cannot be undone.')) return
+    try {
+      await api.deleteUser(me.id)
+      logout()
+    } catch (err) {
+      window.alert(err.message)
+    }
+  }
+
   // If the account was deleted/reset on the backend, send back to login
   // instead of getting stuck on "User not found".
   useEffect(() => {
@@ -126,9 +151,25 @@ export default function App() {
           </h1>
           <div className="me-chip">
             <span>{me.name}</span>
-            <button className="link" onClick={logout}>
-              log out
-            </button>
+            <div className="me-menu" ref={menuRef}>
+              <button
+                className="link menu-btn"
+                onClick={() => setMenuOpen((o) => !o)}
+                aria-label="Account menu"
+              >
+                ⋮
+              </button>
+              {menuOpen && (
+                <div className="me-dropdown">
+                  <button onClick={() => { setMenuOpen(false); logout() }}>
+                    Sign out
+                  </button>
+                  <button className="danger" onClick={deleteAccount}>
+                    Delete my account
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <nav className="tabs">

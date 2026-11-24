@@ -27,6 +27,7 @@ export const api = {
   addUser: (user) => request('/users', { method: 'POST', body: JSON.stringify(user) }),
   updateUser: (id, update) =>
     request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(update) }),
+  deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
 
   // chats
   getChatList: (userId) => request(`/chats/${userId}`),

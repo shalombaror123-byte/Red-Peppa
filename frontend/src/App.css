@@ -111,6 +111,51 @@ h3 {
   color: #ffb3b3;
 }
 
+.me-menu {
+  position: relative;
+  display: flex;
+}
+
+.me-menu .menu-btn {
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.me-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: #2a1416;
+  border: 1px solid #6e2027;
+  border-radius: 10px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
+}
+
+.me-dropdown button {
+  background: none;
+  border: none;
+  color: #f0c8c8;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.me-dropdown button:hover {
+  background: rgb(255 255 255 / 8%);
+}
+
+.me-dropdown button.danger {
+  color: #ff9d9d;
+}
+
 .tabs {
   display: flex;
   gap: 6px;
