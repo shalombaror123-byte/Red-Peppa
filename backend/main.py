@@ -499,4 +499,8 @@ def list_birthdays():
 
 @app.get("/api/version")
 def version():
-    return {"version": "1.0.0", "env": "vercel" if os.environ.get("VERCEL") else "local"}
+    return {
+        "version": "1.0.0",
+        "env": "vercel" if os.environ.get("VERCEL") else "local",
+        "storage": "kv" if USE_KV else "file",
+    }
