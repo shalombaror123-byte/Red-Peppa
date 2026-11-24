@@ -97,8 +97,8 @@ def save_data(data: dict) -> None:
         return
     r = requests.post(
         f"{KV_URL}/set/{KV_KEY}",
-        headers=_KV_HEADERS,
-        json={"value": json.dumps(data)},
+        headers={**_KV_HEADERS, "Content-Type": "application/json"},
+        data=json.dumps(data),
         timeout=10,
     )
     r.raise_for_status()
