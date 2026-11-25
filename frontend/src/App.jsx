@@ -202,15 +202,15 @@ export default function App() {
     img.src = baseIcon.current
   }, [])
 
-  // Clear the badge when the user comes back to the tab.
-  useEffect(() => {
-    const clear = () => {
-      unreadChats.current.clear()
-      setBadge(0)
-    }
-    window.addEventListener('focus', clear)
-    return () => window.removeEventListener('focus', clear)
-  }, [setBadge])
+  // Clear a chat's unread badge once the user opens that conversation.
+  const markChatRead = useCallback(
+    (chatId) => {
+      if (unreadChats.current.delete(chatId)) {
+        setBadge(unreadChats.current.size)
+      }
+    },
+    [setBadge]
+  )
 
   useEffect(() => {
     if (!me) return
@@ -316,7 +316,7 @@ export default function App() {
       </header>
 
       <main className="tab-content" key={tab}>
-        {tab === 'chats' && <Chats me={me} />}
+        {tab === 'chats' && <Chats me={me} onChatRead={markChatRead} />}
         {tab === 'status' && (
           <Statuses
             me={me}

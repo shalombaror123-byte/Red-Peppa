@@ -345,12 +345,17 @@ function ChatWindow({ me, chat, onBack }) {
   )
 }
 
-export default function Chats({ me }) {
+export default function Chats({ me, onChatRead }) {
   const [openChat, setOpenChat] = useState(null)
+
+  const open = (c) => {
+    setOpenChat(c)
+    onChatRead?.(c.id)
+  }
 
   if (openChat) {
     return <ChatWindow me={me} chat={openChat} onBack={() => setOpenChat(null)} />
   }
 
-  return <ChatList me={me} onOpen={setOpenChat} />
+  return <ChatList me={me} onOpen={open} />
 }
