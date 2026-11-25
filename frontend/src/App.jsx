@@ -316,7 +316,9 @@ export default function App() {
       </header>
 
       <main className="tab-content" key={tab}>
-        {tab === 'chats' && <Chats me={me} onChatRead={markChatRead} />}
+        {tab === 'chats' && (
+          <Chats me={me} onChatRead={markChatRead} unread={unreadChats.current} />
+        )}
         {tab === 'status' && (
           <Statuses
             me={me}

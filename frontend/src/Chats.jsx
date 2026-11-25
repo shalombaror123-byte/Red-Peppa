@@ -47,7 +47,7 @@ function compressImage(file) {
   })
 }
 
-function ChatList({ me, onOpen }) {
+function ChatList({ me, onOpen, unread }) {
   const [chats, setChats] = useState(null)
   const [error, setError] = useState(null)
 
@@ -73,7 +73,11 @@ function ChatList({ me, onOpen }) {
   return (
     <div className="chat-list">
       {chats.map((c) => (
-        <button key={c.id} className="chat-item" onClick={() => onOpen(c)}>
+        <button
+          key={c.id}
+          className={unread?.has(c.id) ? 'chat-item unread' : 'chat-item'}
+          onClick={() => onOpen(c)}
+        >
           <span className={`avatar ${c.group ? 'group' : ''}`}>
             {c.group ? '👥' : c.name[0]?.toUpperCase()}
           </span>
@@ -88,6 +92,7 @@ function ChatList({ me, onOpen }) {
                 : c.last_text || 'Say hi!'}
             </span>
           </span>
+          {unread?.has(c.id) && <span className="unread-dot" />}
           {c.last_ts > 0 && <span className="chat-item-time">{fmtTime(c.last_ts)}</span>}
         </button>
       ))}
@@ -345,7 +350,7 @@ function ChatWindow({ me, chat, onBack }) {
   )
 }
 
-export default function Chats({ me, onChatRead }) {
+export default function Chats({ me, onChatRead, unread }) {
   const [openChat, setOpenChat] = useState(null)
 
   const open = (c) => {
@@ -357,5 +362,5 @@ export default function Chats({ me, onChatRead }) {
     return <ChatWindow me={me} chat={openChat} onBack={() => setOpenChat(null)} />
   }
 
-  return <ChatList me={me} onOpen={open} />
+  return <ChatList me={me} onOpen={open} unread={unread} />
 }

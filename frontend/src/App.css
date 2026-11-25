@@ -725,6 +725,20 @@ a {
   font-size: 0.75rem;
 }
 
+.chat-item.unread .chat-item-last {
+  color: inherit;
+  font-weight: 600;
+}
+
+.unread-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #e53935;
+  flex-shrink: 0;
+  align-self: center;
+}
+
 /* ---------- chat window ---------- */
 
 .chat-window {
