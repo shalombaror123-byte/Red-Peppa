@@ -80,16 +80,18 @@ export default function CallManager({ me, outgoing, onDone }) {
     [stopAll]
   )
 
-  const getMedia = async () => {
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: { width: { ideal: 640 } },
-      })
-    } catch {
-      // no camera / denied — fall back to audio-only
-      return await navigator.mediaDevices.getUserMedia({ audio: true })
+  const getMedia = async (video) => {
+    if (video) {
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: { width: { ideal: 640 } },
+        })
+      } catch {
+        // camera denied — fall back to audio-only
+      }
     }
+    return navigator.mediaDevices.getUserMedia({ audio: true })
   }
 
   const attachPC = useCallback(
@@ -216,14 +218,14 @@ export default function CallManager({ me, outgoing, onDone }) {
     let cancelled = false
     ;(async () => {
       try {
-        streamRef.current = await getMedia()
+        streamRef.current = await getMedia(outgoing.video)
         const pc = attachPC('caller')
         await pc.setLocalDescription(await pc.createOffer())
         const { id } = await api.startCall({
           caller: me.id,
           callee: outgoing.id,
           offer: pc.localDescription,
-          video: true,
+          video: Boolean(outgoing.video),
         })
         callIdRef.current = id
         flushCands(id, 'caller')
@@ -236,6 +238,7 @@ export default function CallManager({ me, outgoing, onDone }) {
           peerName: outgoing.name,
           role: 'caller',
           status: 'calling…',
+          video: Boolean(outgoing.video),
         })
         pollCall(id, 'cand_callee', 'hand_callee', 'caller')
       } catch {
@@ -253,7 +256,7 @@ export default function CallManager({ me, outgoing, onDone }) {
     stopRing(ringRef)
     setIncoming(null)
     try {
-      streamRef.current = await getMedia()
+      streamRef.current = await getMedia(call.video)
       callIdRef.current = call.id
       const pc = attachPC('callee')
       await pc.setRemoteDescription(call.offer)
@@ -265,6 +268,7 @@ export default function CallManager({ me, outgoing, onDone }) {
         peerName: call.caller_name,
         role: 'callee',
         status: 'connecting…',
+        video: Boolean(call.video),
       })
       pollCall(call.id, 'cand_caller', 'hand_caller', 'callee')
     } catch {
@@ -387,14 +391,27 @@ export default function CallManager({ me, outgoing, onDone }) {
       )}
       {active && (
         <div className="call-overlay video">
-          <video ref={remoteRef} autoPlay playsInline className="remote-video" />
-          <video
-            ref={localRef}
-            autoPlay
-            playsInline
-            muted
-            className="local-video"
-          />
+          {active.video ? (
+            <>
+              <video
+                ref={remoteRef}
+                autoPlay
+                playsInline
+                className="remote-video"
+              />
+              <video
+                ref={localRef}
+                autoPlay
+                playsInline
+                muted
+                className="local-video"
+              />
+            </>
+          ) : (
+            <div className="voice-avatar">
+              {active.peerName[0]?.toUpperCase()}
+            </div>
+          )}
           {(remoteHand || handUp) && (
             <div className="hand-banner">
               ✋ {remoteHand ? `${active.peerName} raised a hand` : 'You raised a hand'}
@@ -433,20 +450,24 @@ export default function CallManager({ me, outgoing, onDone }) {
             <button onClick={toggleMic} title={micOn ? 'Mute' : 'Unmute'}>
               {micOn ? '🎤' : '🔇'}
             </button>
-            <button
-              onClick={toggleCam}
-              title={camOn ? 'Camera off' : 'Camera on'}
-              disabled={!camTrackRef.current}
-            >
-              {camOn ? '📹' : '📷'}
-            </button>
-            <button
-              onClick={toggleShare}
-              title="Share screen"
-              className={sharing ? 'on' : ''}
-            >
-              🖥️
-            </button>
+            {active.video && (
+              <>
+                <button
+                  onClick={toggleCam}
+                  title={camOn ? 'Camera off' : 'Camera on'}
+                  disabled={!camTrackRef.current}
+                >
+                  {camOn ? '📹' : '📷'}
+                </button>
+                <button
+                  onClick={toggleShare}
+                  title="Share screen"
+                  className={sharing ? 'on' : ''}
+                >
+                  🖥️
+                </button>
+              </>
+            )}
             <button
               onClick={toggleHand}
               title="Raise hand"

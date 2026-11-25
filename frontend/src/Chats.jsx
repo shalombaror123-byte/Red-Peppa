@@ -116,6 +116,7 @@ function ChatWindow({ me, chat, onBack, onCall }) {
   const [reactFor, setReactFor] = useState(null)
   const [replyTo, setReplyTo] = useState(null)
   const [typing, setTyping] = useState([])
+  const [callMenu, setCallMenu] = useState(false)
   const typingSent = useRef(0)
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
@@ -291,13 +292,37 @@ function ChatWindow({ me, chat, onBack, onCall }) {
         </span>
         <strong>{chat.name}</strong>
         {!chat.group && onCall && (
-          <button
-            className="link call-btn"
-            onClick={() => onCall(chat)}
-            title="Voice call"
-          >
-            📞
-          </button>
+          <span className="call-menu-wrap">
+            <button
+              className="link call-btn"
+              onClick={() => setCallMenu((o) => !o)}
+              title="Call"
+            >
+              📞
+            </button>
+            {callMenu && (
+              <span className="msg-menu call-menu">
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setCallMenu(false)
+                    onCall({ id: chat.id, name: chat.name, video: false })
+                  }}
+                >
+                  📞 Voice call
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    setCallMenu(false)
+                    onCall({ id: chat.id, name: chat.name, video: true })
+                  }}
+                >
+                  📹 Video call
+                </button>
+              </span>
+            )}
+          </span>
         )}
       </div>
 
