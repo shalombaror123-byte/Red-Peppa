@@ -40,6 +40,7 @@ export const api = {
   getGroupMessages: (me) => request(`/messages/group?me=${me}`),
   getDmMessages: (otherId, me) => request(`/messages/dm/${otherId}?me=${me}`),
   sendMessage: (msg) => request('/messages', { method: 'POST', body: JSON.stringify(msg) }),
+  deleteMessage: (id) => request(`/messages/${id}`, { method: 'DELETE' }),
   uploadMedia: (data) => request('/media', { method: 'POST', body: JSON.stringify({ data }) }),
 
   // boards

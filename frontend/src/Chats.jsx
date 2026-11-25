@@ -208,6 +208,16 @@ function ChatWindow({ me, chat, onBack }) {
     if (trimmed && /^https?:\/\//.test(trimmed)) sendImage(trimmed)
   }
 
+  const deleteMsg = async (id) => {
+    if (!window.confirm('Delete this message for everyone?')) return
+    try {
+      await api.deleteMessage(id)
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const insertEmoji = (e) => setText((t) => t + e)
 
   const sendSticker = async (emoji) => {
@@ -260,7 +270,16 @@ function ChatWindow({ me, chat, onBack }) {
             <div className="bubble-time">
               {fmtTime(m.ts)}
               {m.sender === me.id && (
-                <span className={m.seen ? 'ticks seen' : 'ticks'}>✓✓</span>
+                <>
+                  <button
+                    className="msg-del"
+                    onClick={() => deleteMsg(m.id)}
+                    title="Delete message"
+                  >
+                    ✕
+                  </button>
+                  <span className={m.seen ? 'ticks seen' : 'ticks'}>✓✓</span>
+                </>
               )}
             </div>
           </div>

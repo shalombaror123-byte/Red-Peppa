@@ -405,6 +405,30 @@ def send_message(msg: MessageIn):
     return record
 
 
+@app.delete("/api/messages/{message_id}", status_code=204)
+def delete_message(message_id: str):
+    with _lock:
+        data = load_data()
+        msg = next(
+            (m for m in data["messages"] if m["id"] == message_id), None
+        )
+        if msg is None:
+            raise HTTPException(status_code=404, detail="Message not found")
+        data["messages"] = [
+            m for m in data["messages"] if m["id"] != message_id
+        ]
+        save_data(data)
+    media = msg.get("media", "")
+    if media.startswith("media:"):
+        mid = media[6:]
+        if USE_KV:
+            requests.post(
+                f"{KV_URL}/del/{MEDIA_PREFIX}{mid}", headers=_KV_HEADERS, timeout=10
+            )
+        else:
+            (MEDIA_DIR / mid).unlink(missing_ok=True)
+
+
 @app.get("/api/chats/{user_id}")
 def chat_list(user_id: str):
     """For the chat list tab: every classmate + the group, with the last
