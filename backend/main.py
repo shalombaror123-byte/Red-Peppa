@@ -381,9 +381,9 @@ def send_message(msg: MessageIn):
         if msg.to != "group":
             get_user_or_404(data, msg.to)
         text = msg.text.strip()
-        kind = msg.kind if msg.kind in ("text", "image") else "text"
+        kind = msg.kind if msg.kind in ("text", "image", "sticker") else "text"
         media = msg.media.strip()
-        if kind == "text" and not text:
+        if kind in ("text", "sticker") and not text:
             raise HTTPException(status_code=400, detail="Message text is required")
         if kind == "image" and not (
             media.startswith("media:")

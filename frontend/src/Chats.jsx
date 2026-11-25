@@ -4,6 +4,21 @@ import { fmtTime } from './time'
 
 const POLL_MS = 2000
 
+const EMOJIS = [
+  '😀', '😂', '🤣', '😊', '😍', '😘', '😜', '🤪', '😎', '🥳', '🤩', '😇',
+  '🙃', '😉', '😋', '😛', '🤗', '🤔', '🤨', '😐', '😑', '🙄', '😏', '😴',
+  '😪', '😌', '🤤', '😷', '🤒', '🤕', '🤢', '🤮', '🥵', '🥶', '😱', '😨',
+  '😰', '😥', '😢', '😭', '😤', '😡', '🤬', '🤯', '😳', '🥺', '❤️', '🧡',
+  '💛', '💚', '💙', '💜', '🖤', '🤍', '💔', '❣️', '💕', '💞', '💓', '💗',
+  '💖', '💘', '👍', '👎', '👏', '🙌', '🙏', '💪', '🤝', '✌️', '🤞', '👋',
+]
+
+const STICKERS = [
+  '🌶️', '🔥', '🎉', '🎂', '🎈', '🏆', '⚽', '🏀', '🎮', '🎸', '🍕', '🍔',
+  '🍩', '☕', '💯', '👑', '🚀', '⭐', '🌈', '☀️', '🌙', '⚡', '🎁', '🏅',
+  '🥇', '🎯', '🎲', '🎧', '📚', '✏️', '🤡', '👻', '💩', '🦄', '🐸', '🐶',
+]
+
 // Shrink a picked image before upload: JPEG at max 900px keeps KV small.
 // GIFs pass through untouched (compressing would kill the animation).
 function compressImage(file) {
@@ -85,8 +100,22 @@ function ChatWindow({ me, chat, onBack }) {
   const [text, setText] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerTab, setPickerTab] = useState('emoji')
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
+  const pickerRef = useRef(null)
+
+  useEffect(() => {
+    if (!pickerOpen) return
+    const close = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        setPickerOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [pickerOpen])
 
   const refresh = useCallback(async () => {
     try {
@@ -172,6 +201,26 @@ function ChatWindow({ me, chat, onBack }) {
     if (trimmed && /^https?:\/\//.test(trimmed)) sendImage(trimmed)
   }
 
+  const insertEmoji = (e) => setText((t) => t + e)
+
+  const sendSticker = async (emoji) => {
+    setPickerOpen(false)
+    setBusy(true)
+    try {
+      await api.sendMessage({
+        sender: me.id,
+        to: chat.id,
+        text: emoji,
+        kind: 'sticker',
+      })
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="chat-window">
       <div className="chat-header">
@@ -196,7 +245,11 @@ function ChatWindow({ me, chat, onBack }) {
             {m.kind === 'image' && m.media && (
               <img className="bubble-img" src={mediaUrl(m.media)} alt="photo" />
             )}
-            {m.text && <div className="bubble-text">{m.text}</div>}
+            {m.kind === 'sticker' ? (
+              <div className="bubble-sticker">{m.text}</div>
+            ) : (
+              m.text && <div className="bubble-text">{m.text}</div>
+            )}
             <div className="bubble-time">
               {fmtTime(m.ts)}
               {m.sender === me.id && (
@@ -213,19 +266,63 @@ function ChatWindow({ me, chat, onBack }) {
 
       {error && <div className="banner error">{error}</div>}
 
-      <form className="composer" onSubmit={send}>
-        <button
-          type="button"
-          className="link"
-          onClick={() => fileRef.current?.click()}
-          aria-label="Send a photo"
-          disabled={busy}
-        >
-          📎
-        </button>
-        <button type="button" className="link" onClick={sendLink} disabled={busy}>
-          GIF
-        </button>
+      <div className="composer-area" ref={pickerRef}>
+        {pickerOpen && (
+          <div className="emoji-panel">
+            <div className="emoji-tabs">
+              <button
+                type="button"
+                className={pickerTab === 'emoji' ? 'emoji-tab active' : 'emoji-tab'}
+                onClick={() => setPickerTab('emoji')}
+              >
+                Emoji
+              </button>
+              <button
+                type="button"
+                className={pickerTab === 'sticker' ? 'emoji-tab active' : 'emoji-tab'}
+                onClick={() => setPickerTab('sticker')}
+              >
+                Stickers
+              </button>
+            </div>
+            <div className="emoji-grid">
+              {(pickerTab === 'emoji' ? EMOJIS : STICKERS).map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  className="emoji-btn"
+                  onClick={() =>
+                    pickerTab === 'emoji' ? insertEmoji(e) : sendSticker(e)
+                  }
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <form className="composer" onSubmit={send}>
+          <button
+            type="button"
+            className="link"
+            onClick={() => setPickerOpen((o) => !o)}
+            aria-label="Emoji and stickers"
+            disabled={busy}
+          >
+            😀
+          </button>
+          <button
+            type="button"
+            className="link"
+            onClick={() => fileRef.current?.click()}
+            aria-label="Send a photo"
+            disabled={busy}
+          >
+            📎
+          </button>
+          <button type="button" className="link" onClick={sendLink} disabled={busy}>
+            GIF
+          </button>
         <input
           placeholder="Type a message…"
           value={text}
@@ -242,7 +339,8 @@ function ChatWindow({ me, chat, onBack }) {
         <button className="primary" type="submit" disabled={busy}>
           Send
         </button>
-      </form>
+        </form>
+      </div>
     </div>
   )
 }

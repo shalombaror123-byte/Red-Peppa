@@ -12,6 +12,32 @@ import './App.css'
 const STORAGE_KEY = 'class-app-user-id'
 const THEME_KEY = 'class-app-theme'
 
+let audioCtx = null
+
+// Short two-tone "ding" for incoming messages, synthesized so no audio
+// file is needed. Roughly WhatsApp-style: high note then lower note.
+const playDing = () => {
+  try {
+    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)()
+    if (audioCtx.state === 'suspended') audioCtx.resume()
+    const t = audioCtx.currentTime
+    for (const [off, freq] of [[0, 988], [0.11, 740]]) {
+      const osc = audioCtx.createOscillator()
+      const gain = audioCtx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, t + off)
+      gain.gain.exponentialRampToValueAtTime(0.12, t + off + 0.012)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.14)
+      osc.connect(gain).connect(audioCtx.destination)
+      osc.start(t + off)
+      osc.stop(t + off + 0.16)
+    }
+  } catch {
+    // audio unsupported / still locked — skip silently
+  }
+}
+
 function ModeTabs({ theme, onToggle }) {
   return (
     <div className="auth-tabs mode-tabs">
@@ -153,6 +179,7 @@ export default function App() {
           const prev = map[c.id]
           map[c.id] = c.last_ts
           if (prev === undefined || c.last_ts <= prev || c.last_mine) continue
+          playDing()
           if (
             'Notification' in window &&
             Notification.permission === 'granted' &&
@@ -175,6 +202,16 @@ export default function App() {
       clearInterval(t)
     }
   }, [me])
+
+  // Browsers only allow audio after a user gesture — resume the shared
+  // context on any tap so the first ding isn't silent.
+  useEffect(() => {
+    const unlock = () => {
+      if (audioCtx?.state === 'suspended') audioCtx.resume()
+    }
+    document.addEventListener('pointerdown', unlock)
+    return () => document.removeEventListener('pointerdown', unlock)
+  }, [])
 
   if (!me) {
     return (
