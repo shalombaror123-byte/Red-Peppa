@@ -1261,6 +1261,34 @@ a {
   color: #ff6b6b;
 }
 
+.gif-grid {
+  align-items: center;
+}
+
+.gif-cell {
+  background: none;
+  border: none;
+  padding: 3px;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gif-cell:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.gif-cell img {
+  width: 64px;
+  height: 64px;
+}
+
+.gif-cell.link {
+  font-size: 0.8rem;
+}
+
 .tab-dot {
   display: inline-block;
   width: 7px;

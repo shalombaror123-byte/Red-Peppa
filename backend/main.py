@@ -424,6 +424,7 @@ def send_message(msg: MessageIn):
             media.startswith("media:")
             or media.startswith("http://")
             or media.startswith("https://")
+            or media.startswith("/")
         ):
             raise HTTPException(status_code=400, detail="Image needs a media id or URL")
         record = {

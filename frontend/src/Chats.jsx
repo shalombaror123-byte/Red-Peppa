@@ -15,6 +15,12 @@ const EMOJIS = [
 
 const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
+const GIFS = [
+  'laugh', 'cry', 'heart', 'love', 'cool', 'party',
+  'sleep', 'angry', 'wow', 'wink', 'thumbs', 'clap',
+  'star', 'fire', 'yes', 'no', 'dance', 'wave',
+]
+
 const STICKERS = [
   '🌶️', '🔥', '🎉', '🎂', '🎈', '🏆', '⚽', '🏀', '🎮', '🎸', '🍕', '🍔',
   '🍩', '☕', '💯', '👑', '🚀', '⭐', '🌈', '☀️', '🌙', '⚡', '🎁', '🏅',
@@ -227,6 +233,22 @@ function ChatWindow({ me, chat, onBack, onCall }) {
     const url = window.prompt('Paste an image or GIF link')
     const trimmed = url?.trim()
     if (trimmed && /^https?:\/\//.test(trimmed)) sendImage(trimmed)
+  }
+
+  const sendGif = async (name) => {
+    setPickerOpen(false)
+    try {
+      await api.sendMessage({
+        sender: me.id,
+        to: chat.id,
+        text: '',
+        kind: 'image',
+        media: `/gifs/${name}.gif`,
+      })
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   const deleteMsg = async (id) => {
@@ -537,21 +559,53 @@ function ChatWindow({ me, chat, onBack, onCall }) {
               >
                 Stickers
               </button>
+              <button
+                type="button"
+                className={pickerTab === 'gif' ? 'emoji-tab active' : 'emoji-tab'}
+                onClick={() => setPickerTab('gif')}
+              >
+                GIFs
+              </button>
             </div>
-            <div className="emoji-grid">
-              {(pickerTab === 'emoji' ? EMOJIS : STICKERS).map((e) => (
+            {pickerTab === 'gif' ? (
+              <div className="emoji-grid gif-grid">
                 <button
-                  key={e}
                   type="button"
-                  className="emoji-btn"
-                  onClick={() =>
-                    pickerTab === 'emoji' ? insertEmoji(e) : sendSticker(e)
-                  }
+                  className="gif-cell link"
+                  onClick={() => {
+                    setPickerOpen(false)
+                    sendLink()
+                  }}
                 >
-                  {e}
+                  🔗 link
                 </button>
-              ))}
-            </div>
+                {GIFS.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    className="gif-cell"
+                    onClick={() => sendGif(g)}
+                  >
+                    <img src={`/gifs/${g}.gif`} alt={g} />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="emoji-grid">
+                {(pickerTab === 'emoji' ? EMOJIS : STICKERS).map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    className="emoji-btn"
+                    onClick={() =>
+                      pickerTab === 'emoji' ? insertEmoji(e) : sendSticker(e)
+                    }
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         <form className="composer" onSubmit={send}>
@@ -573,7 +627,15 @@ function ChatWindow({ me, chat, onBack, onCall }) {
           >
             📎
           </button>
-          <button type="button" className="link" onClick={sendLink} disabled={busy}>
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              setPickerTab('gif')
+              setPickerOpen(true)
+            }}
+            disabled={busy}
+          >
             GIF
           </button>
         <input
