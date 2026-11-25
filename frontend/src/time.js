@@ -20,7 +20,7 @@ export function fmtAgo(ts) {
 }
 
 export function fmtLastSeen(ts) {
-  if (!ts) return ''
+  if (!ts) return 'last seen a while ago'
   if (Date.now() / 1000 - ts < 75) return 'online'
   const d = new Date(ts * 1000)
   const today = new Date()
