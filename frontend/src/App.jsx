@@ -166,9 +166,56 @@ export default function App() {
   // Watch for new incoming messages and fire a browser notification when
   // the user isn't looking at the tab (same as WhatsApp Web).
   const lastMsgTs = useRef({})
+  const unreadChats = useRef(new Set())
+  const baseTitle = useRef(null)
+  const baseIcon = useRef(null)
+
+  // Google-Chat-style tab badge: red dot on the favicon + (n) in title.
+  const setBadge = useCallback((count) => {
+    baseTitle.current ??= document.title
+    document.title =
+      count > 0 ? `(${count}) ${baseTitle.current}` : baseTitle.current
+    let link = document.querySelector("link[rel~='icon']")
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    baseIcon.current ??= link.href
+    if (count === 0) {
+      link.href = baseIcon.current
+      return
+    }
+    const img = new Image()
+    img.onload = () => {
+      if (unreadChats.current.size === 0) return
+      const canvas = document.createElement('canvas')
+      canvas.width = canvas.height = 64
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0, 64, 64)
+      ctx.fillStyle = '#e53935'
+      ctx.beginPath()
+      ctx.arc(46, 18, 15, 0, Math.PI * 2)
+      ctx.fill()
+      link.href = canvas.toDataURL('image/png')
+    }
+    img.src = baseIcon.current
+  }, [])
+
+  // Clear the badge when the user comes back to the tab.
+  useEffect(() => {
+    const clear = () => {
+      unreadChats.current.clear()
+      setBadge(0)
+    }
+    window.addEventListener('focus', clear)
+    return () => window.removeEventListener('focus', clear)
+  }, [setBadge])
+
   useEffect(() => {
     if (!me) return
     lastMsgTs.current = {}
+    unreadChats.current.clear()
     let alive = true
     const check = async () => {
       try {
@@ -180,15 +227,15 @@ export default function App() {
           map[c.id] = c.last_ts
           if (prev === undefined || c.last_ts <= prev || c.last_mine) continue
           playDing()
-          if (
-            'Notification' in window &&
-            Notification.permission === 'granted' &&
-            !(document.visibilityState === 'visible' && document.hasFocus())
-          ) {
-            new Notification(c.name, {
-              body: c.last_kind === 'image' ? '📷 Photo' : c.last_text,
-              icon: '/pepper.png',
-            })
+          if (!(document.visibilityState === 'visible' && document.hasFocus())) {
+            unreadChats.current.add(c.id)
+            setBadge(unreadChats.current.size)
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(c.name, {
+                body: c.last_kind === 'image' ? '📷 Photo' : c.last_text,
+                icon: '/pepper.png',
+              })
+            }
           }
         }
       } catch {
