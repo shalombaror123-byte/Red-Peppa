@@ -246,6 +246,8 @@ def login(creds: LoginIn):
     for u in data["users"]:
         if u["name"].lower() == creds.name.strip().lower():
             if hash_password(creds.password, u["pw_salt"]) == u["pw_hash"]:
+                u["last_seen"] = now_ts()
+                save_data(data)
                 return public_user(u)
             break
     raise HTTPException(status_code=401, detail="Wrong name or password")
@@ -371,10 +373,14 @@ def dm_messages(other_id: str, me: str, since: float = 0):
     ts = data.get("typing", {}).get(me, {}).get(other_id, 0)
     typing = [names.get(other_id, "?")] if ts > cutoff else []
     peer = users.get(other_id, {})
+    peer_seen = peer.get("last_seen", 0) or max(
+        (m["ts"] for m in data["messages"] if m["sender"] == other_id),
+        default=0,
+    )
     return {
         "messages": msgs,
         "typing": typing,
-        "peer_last_seen": peer.get("last_seen", 0),
+        "peer_last_seen": peer_seen,
     }
 
 
@@ -545,7 +551,11 @@ def chat_list(user_id: str):
 
     last_group = None
     last_dm: dict[str, dict] = {}
+    last_active: dict[str, float] = {}
     for m in data["messages"]:
+        last_active[m["sender"]] = max(
+            last_active.get(m["sender"], 0), m["ts"]
+        )
         if m["to"] == "group":
             last_group = m
         elif m["sender"] == user_id:
@@ -569,7 +579,7 @@ def chat_list(user_id: str):
                 "last_kind": last.get("kind", "text") if last else "text",
                 "last_mine": bool(last and last["sender"] == user_id),
                 "seen": bool(last and last["sender"] == user_id and uid in last.get("seen_by", {})),
-                "last_seen": u.get("last_seen", 0),
+                "last_seen": u.get("last_seen", 0) or last_active.get(uid, 0),
             }
         )
     group_seen = bool(
