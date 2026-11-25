@@ -16,9 +16,14 @@ const EMOJIS = [
 const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
 const GIFS = [
-  'laugh', 'cry', 'heart', 'love', 'cool', 'party',
-  'sleep', 'angry', 'wow', 'wink', 'thumbs', 'clap',
-  'star', 'fire', 'yes', 'no', 'dance', 'wave',
+  'mindblown', 'facepalm', 'pulpfiction', 'surprised-pikachu', 'homerbush',
+  'nod', 'hellno', 'nope', 'nopesimpsons', 'notsure', 'woohoo',
+  'itshappening', 'entertained', 'kermit', 'kidthumbsup', 'gladiatorthumbsup',
+  'excellentburns', 'whatever', 'magic', 'makeitrain', 'thinkaboutit',
+  'themoreyouknow', 'ohsnap', 'doit', 'butwhy', 'babyconfused', 'grimacing',
+  'disappointed-fan', 'evil-laughter', 'idowhatiwant', 'jokerclapping',
+  'panda', 'patrick', 'raiseglass', 'yougotitdude', '9000',
+  'holdontoyourbutts', 'bees', 'goodgood', 'stopgirl', 'itsatrap',
 ]
 
 const STICKERS = [
@@ -586,7 +591,7 @@ function ChatWindow({ me, chat, onBack, onCall }) {
                     className="gif-cell"
                     onClick={() => sendGif(g)}
                   >
-                    <img src={`/gifs/${g}.gif`} alt={g} />
+                    <img src={`/gifs/${g}.gif`} alt={g} loading="lazy" />
                   </button>
                 ))}
               </div>
