@@ -25,6 +25,7 @@ export default function CallManager({ me, outgoing, onDone }) {
   const [chatDraft, setChatDraft] = useState('')
   const pcRef = useRef(null)
   const streamRef = useRef(null)
+  const remoteStreamRef = useRef(null)
   const remoteRef = useRef(null)
   const localRef = useRef(null)
   const videoSenderRef = useRef(null)
@@ -110,7 +111,11 @@ export default function CallManager({ me, outgoing, onDone }) {
         }
       }
       pc.ontrack = (e) => {
-        if (remoteRef.current) remoteRef.current.srcObject = e.streams[0]
+        remoteStreamRef.current = e.streams[0]
+        if (remoteRef.current) {
+          remoteRef.current.srcObject = e.streams[0]
+          remoteRef.current.play().catch(() => {})
+        }
       }
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'connected') {
@@ -171,6 +176,7 @@ export default function CallManager({ me, outgoing, onDone }) {
           if (role === 'caller' && c.answer && !answeredRef.current) {
             answeredRef.current = true
             await pcRef.current?.setRemoteDescription(c.answer)
+            setActive((a) => (a ? { ...a, status: 'connecting…' } : a))
           }
           setRemoteHand(Boolean(c[remoteHand]))
           setCallChat(c.chat || [])
@@ -288,6 +294,22 @@ export default function CallManager({ me, outgoing, onDone }) {
     }
   }, [active, camOn])
 
+  // Reattach remote stream if tracks arrived before the element mounted.
+  useEffect(() => {
+    if (remoteRef.current && remoteStreamRef.current) {
+      remoteRef.current.srcObject = remoteStreamRef.current
+      remoteRef.current.play().catch(() => {})
+    }
+  }, [active])
+
+  // Ringback tone while the other side hasn't picked up yet.
+  useEffect(() => {
+    if (active?.status === 'calling…') {
+      startRing(ringRef)
+      return () => stopRing(ringRef)
+    }
+  }, [active?.status])
+
   const toggleMic = () => {
     const t = streamRef.current?.getAudioTracks()[0]
     if (t) {
@@ -391,22 +413,20 @@ export default function CallManager({ me, outgoing, onDone }) {
       )}
       {active && (
         <div className="call-overlay video">
+          <video
+            ref={remoteRef}
+            autoPlay
+            playsInline
+            className={active.video ? 'remote-video' : 'remote-hidden'}
+          />
           {active.video ? (
-            <>
-              <video
-                ref={remoteRef}
-                autoPlay
-                playsInline
-                className="remote-video"
-              />
-              <video
-                ref={localRef}
-                autoPlay
-                playsInline
-                muted
-                className="local-video"
-              />
-            </>
+            <video
+              ref={localRef}
+              autoPlay
+              playsInline
+              muted
+              className="local-video"
+            />
           ) : (
             <div className="voice-avatar">
               {active.peerName[0]?.toUpperCase()}
