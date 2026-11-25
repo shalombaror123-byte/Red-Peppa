@@ -67,9 +67,11 @@ export const api = {
     request('/typing', { method: 'POST', body: JSON.stringify(body) }),
   reportMessage: (body) =>
     request('/reports', { method: 'POST', body: JSON.stringify(body) }),
-  getReports: () => request('/reports'),
+  getReports: (userId) => request(`/reports?me=${userId}`),
   resolveReport: (id, body) =>
     request(`/reports/${id}/resolve`, { method: 'POST', body: JSON.stringify(body) }),
+  unbanUser: (id, body) =>
+    request(`/users/${id}/unban`, { method: 'POST', body: JSON.stringify(body) }),
   getWarnings: (userId) => request(`/warnings/${userId}`),
   ackWarning: (id) => request(`/warnings/${id}/seen`, { method: 'POST' }),
   uploadMedia: (data) => request('/media', { method: 'POST', body: JSON.stringify({ data }) }),

@@ -51,6 +51,7 @@ export default function Statuses({ me, users, onRefresh, onMeUpdate }) {
           {busy ? 'Posting…' : 'Set status'}
         </button>
       </form>
+      <p className="muted small">Statuses disappear after 24 hours.</p>
 
       {meUser.status && (
         <p className="muted your-status">

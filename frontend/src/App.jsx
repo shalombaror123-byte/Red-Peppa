@@ -59,6 +59,7 @@ export default function App() {
   const [callsUnread, setCallsUnread] = useState(false)
   const [callPeer, setCallPeer] = useState(null)
   const [warning, setWarning] = useState(null)
+  const banDismissed = useRef(null)
   const [error, setError] = useState(null)
   const [theme, setTheme] = useState(
     () => localStorage.getItem(THEME_KEY) || 'dark'
@@ -146,9 +147,20 @@ export default function App() {
   // instead of getting stuck on "User not found". Skip for 30s after
   // sign-in so a stale in-flight users fetch can't bounce a fresh login.
   useEffect(() => {
-    if (!me || !users || users.some((u) => u.id === me.id)) return
-    if (Date.now() - loginAtRef.current < 30_000) return
-    logout()
+    if (!me || !users) return
+    const fresh = users.find((u) => u.id === me.id)
+    if (!fresh) {
+      if (Date.now() - loginAtRef.current >= 30_000) logout()
+      return
+    }
+    if (
+      fresh.banned_until !== me.banned_until ||
+      fresh.admin !== me.admin ||
+      fresh.status !== me.status ||
+      fresh.name !== me.name
+    ) {
+      setMe(fresh)
+    }
   }, [me, users, logout])
 
   // Watch for new incoming messages and fire a browser notification when
@@ -210,7 +222,9 @@ export default function App() {
         const [d, ann, reps, warns, clog] = await Promise.all([
           api.getChatList(me.id),
           api.getAnnouncements(),
-          me.admin ? api.getReports() : Promise.resolve({ reports: [] }),
+          me.admin
+            ? api.getReports(me.id)
+            : Promise.resolve({ reports: [] }),
           api.getWarnings(me.id),
           api.getCallLog(me.id),
         ])
@@ -429,7 +443,9 @@ export default function App() {
           />
         )}
         {tab === 'calls' && <CallLog me={me} onCall={setCallPeer} />}
-        {tab === 'reports' && me.admin && <Reports />}
+        {tab === 'reports' && me.admin && (
+          <Reports me={me} users={users} onRefresh={loadUsers} />
+        )}
         {tab === 'status' && (
           <Statuses
             me={me}
@@ -469,6 +485,38 @@ export default function App() {
         outgoing={callPeer}
         onDone={() => setCallPeer(null)}
       />
+      {me.banned_until !== undefined &&
+        (me.banned_until === -1 ||
+          me.banned_until > Date.now() / 1000) &&
+        banDismissed.current !== me.banned_until && (
+          <div className="call-overlay">
+            <div className="call-card">
+              <div className="call-icon">🔨</div>
+              <div className="call-name">You've been banned</div>
+              <div className="muted">
+                {me.banned_until === -1
+                  ? 'An admin banned you — you can read but not post until they lift it.'
+                  : `You can post again at ${new Date(
+                      me.banned_until * 1000
+                    ).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}.`}
+              </div>
+              <div className="call-actions">
+                <button
+                  className="primary"
+                  onClick={() => {
+                    banDismissed.current = me.banned_until
+                    setMe((m) => ({ ...m }))
+                  }}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       {warning && (
         <div className="call-overlay">
           <div className="call-card">

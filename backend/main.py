@@ -126,19 +126,38 @@ def get_user_or_404(data: dict, user_id: str) -> dict:
     raise HTTPException(status_code=404, detail="User not found")
 
 
+STATUS_TTL = 24 * 3600  # statuses disappear after 24 hours
+
+
 def public_user(u: dict) -> dict:
     """User record without the password hash/salt."""
+    status_ts = u.get("status_ts", 0)
+    status = u.get("status", "") if now_ts() - status_ts < STATUS_TTL else ""
     return {
         "id": u["id"],
         "name": u["name"],
         "phone": u["phone"],
         "email": u["email"],
         "birthday": u["birthday"],
-        "status": u.get("status", ""),
-        "status_ts": u.get("status_ts", 0),
+        "status": status,
+        "status_ts": status_ts if status else 0,
         "admin": bool(u.get("admin")),
         "last_seen": u.get("last_seen", 0),
+        "banned_until": u.get("banned_until", 0),
     }
+
+
+def get_admin_or_403(data: dict, uid: str) -> dict:
+    u = get_user_or_404(data, uid)
+    if not u.get("admin"):
+        raise HTTPException(status_code=403, detail="Admin only")
+    return u
+
+
+def assert_not_banned(u: dict) -> None:
+    until = u.get("banned_until", 0)
+    if until == -1 or until > now_ts():
+        raise HTTPException(status_code=403, detail="You are banned")
 
 
 def touch_user(data: dict, uid: str) -> bool:
@@ -434,7 +453,8 @@ def get_media(media_id: str):
 def send_message(msg: MessageIn):
     with _lock:
         data = load_data()
-        get_user_or_404(data, msg.sender)
+        sender = get_user_or_404(data, msg.sender)
+        assert_not_banned(sender)
         touch_user(data, msg.sender)
         if msg.to != "group":
             get_user_or_404(data, msg.to)
@@ -594,7 +614,7 @@ def list_news():
 def post_news(post: PostIn):
     with _lock:
         data = load_data()
-        get_user_or_404(data, post.author)
+        assert_not_banned(get_user_or_404(data, post.author))
         record = {
             "id": new_id(),
             "author": post.author,
@@ -625,7 +645,7 @@ def list_announcements():
 def post_announcement(post: PostIn):
     with _lock:
         data = load_data()
-        get_user_or_404(data, post.author)
+        assert_not_banned(get_user_or_404(data, post.author))
         record = {
             "id": new_id(),
             "author": post.author,
@@ -656,7 +676,7 @@ def list_study():
 def post_study(post: StudyIn):
     with _lock:
         data = load_data()
-        get_user_or_404(data, post.author)
+        assert_not_banned(get_user_or_404(data, post.author))
         record = {
             "id": new_id(),
             "author": post.author,
@@ -693,7 +713,7 @@ def list_jokes():
 def post_joke(post: PostIn):
     with _lock:
         data = load_data()
-        get_user_or_404(data, post.author)
+        assert_not_banned(get_user_or_404(data, post.author))
         record = {
             "id": new_id(),
             "author": post.author,
@@ -1017,7 +1037,8 @@ class ReportIn(BaseModel):
 
 
 class ResolveIn(BaseModel):
-    warn: bool = False
+    me: str
+    action: str = "dismiss"  # dismiss | warn | ban2h | ban
     text: str = Field(default="", max_length=500)
 
 
@@ -1054,8 +1075,9 @@ def create_report(body: ReportIn):
 
 
 @app.get("/api/reports")
-def list_reports():
+def list_reports(me: str = ""):
     data = load_data()
+    get_admin_or_403(data, me)
     names = {u["id"]: u["name"] for u in data["users"]}
     items = [
         {
@@ -1073,13 +1095,15 @@ def list_reports():
 def resolve_report(report_id: str, body: ResolveIn):
     with _lock:
         data = load_data()
+        get_admin_or_403(data, body.me)
         rep = next(
             (r for r in data["reports"] if r["id"] == report_id), None
         )
         if rep is None:
             raise HTTPException(status_code=404, detail="Report not found")
         rep["status"] = "resolved"
-        if body.warn:
+        target = get_user_or_404(data, rep["reported"])
+        if body.action == "warn":
             data["warnings"].append(
                 {
                     "id": new_id(),
@@ -1090,6 +1114,25 @@ def resolve_report(report_id: str, body: ResolveIn):
                     "seen": False,
                 }
             )
+        elif body.action == "ban2h":
+            target["banned_until"] = now_ts() + 7200
+        elif body.action == "ban":
+            target["banned_until"] = -1
+        save_data(data)
+    return {"ok": True}
+
+
+class UnbanIn(BaseModel):
+    me: str
+
+
+@app.post("/api/users/{user_id}/unban")
+def unban_user(user_id: str, body: UnbanIn):
+    with _lock:
+        data = load_data()
+        get_admin_or_403(data, body.me)
+        u = get_user_or_404(data, user_id)
+        u["banned_until"] = 0
         save_data(data)
     return {"ok": True}
 
