@@ -82,7 +82,10 @@ function ChatList({ me, onOpen, unread }) {
             {c.group ? '👥' : c.name[0]?.toUpperCase()}
           </span>
           <span className="chat-item-body">
-            <span className="chat-item-name">{c.name}</span>
+            <span className="chat-item-name">
+              {c.name}
+              {unread?.has(c.id) && <span className="unread-dot" />}
+            </span>
             <span className="chat-item-last">
               {c.last_mine && (
                 <span className={c.seen ? 'ticks seen' : 'ticks'}>✓✓ </span>
@@ -92,7 +95,6 @@ function ChatList({ me, onOpen, unread }) {
                 : c.last_text || 'Say hi!'}
             </span>
           </span>
-          {unread?.has(c.id) && <span className="unread-dot" />}
           {c.last_ts > 0 && <span className="chat-item-time">{fmtTime(c.last_ts)}</span>}
         </button>
       ))}
