@@ -41,6 +41,8 @@ export const api = {
   getDmMessages: (otherId, me) => request(`/messages/dm/${otherId}?me=${me}`),
   sendMessage: (msg) => request('/messages', { method: 'POST', body: JSON.stringify(msg) }),
   deleteMessage: (id) => request(`/messages/${id}`, { method: 'DELETE' }),
+  editMessage: (id, body) =>
+    request(`/messages/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   uploadMedia: (data) => request('/media', { method: 'POST', body: JSON.stringify({ data }) }),
 
   // boards

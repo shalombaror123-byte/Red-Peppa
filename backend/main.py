@@ -405,6 +405,29 @@ def send_message(msg: MessageIn):
     return record
 
 
+class MessageEdit(BaseModel):
+    text: str = Field(min_length=1)
+
+
+@app.patch("/api/messages/{message_id}")
+def edit_message(message_id: str, body: MessageEdit):
+    with _lock:
+        data = load_data()
+        msg = next(
+            (m for m in data["messages"] if m["id"] == message_id), None
+        )
+        if msg is None:
+            raise HTTPException(status_code=404, detail="Message not found")
+        if msg.get("kind", "text") != "text":
+            raise HTTPException(
+                status_code=400, detail="Only text messages can be edited"
+            )
+        msg["text"] = body.text
+        msg["edited"] = True
+        save_data(data)
+        return msg
+
+
 @app.delete("/api/messages/{message_id}", status_code=204)
 def delete_message(message_id: str):
     with _lock:
