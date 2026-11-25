@@ -48,6 +48,9 @@ export const api = {
   // boards
   getNews: () => request('/news'),
   postNews: (post) => request('/news', { method: 'POST', body: JSON.stringify(post) }),
+  getAnnouncements: () => request('/announcements'),
+  postAnnouncement: (post) =>
+    request('/announcements', { method: 'POST', body: JSON.stringify(post) }),
   getStudy: () => request('/study'),
   postStudy: (post) => request('/study', { method: 'POST', body: JSON.stringify(post) }),
   getJokes: () => request('/jokes'),

@@ -263,6 +263,43 @@ function ChatWindow({ me, chat, onBack }) {
             key={m.id}
             className={`bubble ${m.sender === me.id ? 'mine' : 'theirs'}`}
           >
+            {m.sender === me.id && (
+              <span className="msg-menu-wrap">
+                <button
+                  className="msg-menu-btn"
+                  onClick={() =>
+                    setMsgMenu(msgMenu === m.id ? null : m.id)
+                  }
+                  title="Message options"
+                >
+                  ⋮
+                </button>
+                {msgMenu === m.id && (
+                  <span className="msg-menu">
+                    {(m.kind || 'text') === 'text' && (
+                      <button
+                        onClick={() => {
+                          setEditing(m)
+                          setText(m.text)
+                          setMsgMenu(null)
+                        }}
+                      >
+                        Edit
+                      </button>
+                    )}
+                    <button
+                      className="danger"
+                      onClick={() => {
+                        setMsgMenu(null)
+                        deleteMsg(m.id)
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </span>
+                )}
+              </span>
+            )}
             {chat.group && m.sender !== me.id && (
               <div className="bubble-sender">{m.sender_name}</div>
             )}
@@ -278,44 +315,7 @@ function ChatWindow({ me, chat, onBack }) {
               {m.edited && <span className="edited-tag">edited</span>}
               {fmtTime(m.ts)}
               {m.sender === me.id && (
-                <>
-                  <span className="msg-menu-wrap">
-                    <button
-                      className="msg-menu-btn"
-                      onClick={() =>
-                        setMsgMenu(msgMenu === m.id ? null : m.id)
-                      }
-                      title="Message options"
-                    >
-                      ⋮
-                    </button>
-                    {msgMenu === m.id && (
-                      <span className="msg-menu">
-                        {(m.kind || 'text') === 'text' && (
-                          <button
-                            onClick={() => {
-                              setEditing(m)
-                              setText(m.text)
-                              setMsgMenu(null)
-                            }}
-                          >
-                            Edit
-                          </button>
-                        )}
-                        <button
-                          className="danger"
-                          onClick={() => {
-                            setMsgMenu(null)
-                            deleteMsg(m.id)
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </span>
-                    )}
-                  </span>
-                  <span className={m.seen ? 'ticks seen' : 'ticks'}>✓✓</span>
-                </>
+                <span className={m.seen ? 'ticks seen' : 'ticks'}>✓✓</span>
               )}
             </div>
           </div>

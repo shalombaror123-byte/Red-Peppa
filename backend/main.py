@@ -74,6 +74,7 @@ EMPTY_DATA = {
     "news": [],       # {id, author, text, ts}
     "jokes": [],      # {id, author, text, ts}
     "study": [],      # {id, author, subject, text, ts}
+    "announcements": [],  # {id, author, text, ts}
 }
 
 
@@ -538,6 +539,37 @@ def post_news(post: PostIn):
             "ts": now_ts(),
         }
         data["news"].append(record)
+        save_data(data)
+    return record
+
+
+# ---------- announcements ----------
+
+
+@app.get("/api/announcements")
+def list_announcements():
+    data = load_data()
+    names = {u["id"]: u["name"] for u in data["users"]}
+    items = [
+        {**a, "author_name": names.get(a["author"], "?")}
+        for a in data["announcements"]
+    ]
+    items.sort(key=lambda a: a["ts"], reverse=True)
+    return {"announcements": items}
+
+
+@app.post("/api/announcements", status_code=201)
+def post_announcement(post: PostIn):
+    with _lock:
+        data = load_data()
+        get_user_or_404(data, post.author)
+        record = {
+            "id": new_id(),
+            "author": post.author,
+            "text": post.text.strip(),
+            "ts": now_ts(),
+        }
+        data["announcements"].append(record)
         save_data(data)
     return record
 

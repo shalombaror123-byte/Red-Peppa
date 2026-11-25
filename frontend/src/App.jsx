@@ -14,24 +14,25 @@ const THEME_KEY = 'class-app-theme'
 
 let audioCtx = null
 
-// Short two-tone "ding" for incoming messages, synthesized so no audio
-// file is needed. Roughly WhatsApp-style: high note then lower note.
+// Soft "pling" for incoming messages, synthesized so no audio file is
+// needed. Bell-like: a bright strike with a faint harmonic shimmer and a
+// smooth decay — in the spirit of Google Chat's notification.
 const playDing = () => {
   try {
     audioCtx ??= new (window.AudioContext || window.webkitAudioContext)()
     if (audioCtx.state === 'suspended') audioCtx.resume()
     const t = audioCtx.currentTime
-    for (const [off, freq] of [[0, 988], [0.11, 740]]) {
+    for (const [freq, vol, decay] of [[1568, 0.18, 0.45], [3136, 0.05, 0.25]]) {
       const osc = audioCtx.createOscillator()
       const gain = audioCtx.createGain()
       osc.type = 'sine'
       osc.frequency.value = freq
-      gain.gain.setValueAtTime(0.0001, t + off)
-      gain.gain.exponentialRampToValueAtTime(0.12, t + off + 0.012)
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.14)
+      gain.gain.setValueAtTime(0.0001, t)
+      gain.gain.exponentialRampToValueAtTime(vol, t + 0.006)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + decay)
       osc.connect(gain).connect(audioCtx.destination)
-      osc.start(t + off)
-      osc.stop(t + off + 0.16)
+      osc.start(t)
+      osc.stop(t + decay + 0.05)
     }
   } catch {
     // audio unsupported / still locked — skip silently
@@ -59,6 +60,7 @@ function ModeTabs({ theme, onToggle }) {
 
 const TABS = [
   { id: 'chats', label: 'Chats' },
+  { id: 'important', label: 'Important' },
   { id: 'status', label: 'Status' },
   { id: 'directory', label: 'Directory' },
   { id: 'news', label: 'News' },
@@ -71,6 +73,7 @@ export default function App() {
   const [users, setUsers] = useState(null)
   const [me, setMe] = useState(null)
   const [tab, setTab] = useState('chats')
+  const [annUnread, setAnnUnread] = useState(false)
   const [error, setError] = useState(null)
   const [theme, setTheme] = useState(
     () => localStorage.getItem(THEME_KEY) || 'dark'
@@ -219,9 +222,36 @@ export default function App() {
     let alive = true
     const check = async () => {
       try {
-        const d = await api.getChatList(me.id)
+        const [d, ann] = await Promise.all([
+          api.getChatList(me.id),
+          api.getAnnouncements(),
+        ])
         if (!alive) return
         const map = lastMsgTs.current
+        const newest = ann.announcements[0]
+        if (newest) {
+          const prev = map['__ann']
+          map['__ann'] = newest.ts
+          if (prev !== undefined && newest.ts > prev && newest.author !== me.id) {
+            playDing()
+            if (
+              !(document.visibilityState === 'visible' && document.hasFocus())
+            ) {
+              unreadChats.current.add('important')
+              setBadge(unreadChats.current.size)
+              setAnnUnread(true)
+              if (
+                'Notification' in window &&
+                Notification.permission === 'granted'
+              ) {
+                new Notification('📢 Important announcement', {
+                  body: `${newest.author_name}: ${newest.text}`,
+                  icon: '/pepper.png',
+                })
+              }
+            }
+          }
+        }
         for (const c of d.chats) {
           const prev = map[c.id]
           map[c.id] = c.last_ts
@@ -307,9 +337,18 @@ export default function App() {
             <button
               key={t.id}
               className={tab === t.id ? 'tab active' : 'tab'}
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                setTab(t.id)
+                if (t.id === 'important') {
+                  setAnnUnread(false)
+                  markChatRead('important')
+                }
+              }}
             >
               {t.label}
+              {t.id === 'important' && annUnread && (
+                <span className="tab-dot" />
+              )}
             </button>
           ))}
         </nav>
@@ -318,6 +357,15 @@ export default function App() {
       <main className="tab-content" key={tab}>
         {tab === 'chats' && (
           <Chats me={me} onChatRead={markChatRead} unread={unreadChats.current} />
+        )}
+        {tab === 'important' && (
+          <PostBoard
+            title="Important Announcements"
+            placeholder="Post an important announcement…"
+            fetchPosts={api.getAnnouncements}
+            sendPost={(text) => api.postAnnouncement({ author: me.id, text })}
+            itemsKey="announcements"
+          />
         )}
         {tab === 'status' && (
           <Statuses
