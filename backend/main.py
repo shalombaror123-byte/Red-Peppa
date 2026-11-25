@@ -75,6 +75,7 @@ EMPTY_DATA = {
     "jokes": [],      # {id, author, text, ts}
     "study": [],      # {id, author, subject, text, ts}
     "announcements": [],  # {id, author, text, ts}
+    "calls": [],      # {id, caller, callee, offer, answer, state, cand_caller, cand_callee, ts}
 }
 
 
@@ -399,6 +400,7 @@ def send_message(msg: MessageIn):
             "text": text,
             "kind": kind,
             "media": media if kind == "image" else "",
+            "reactions": [],  # [{user, emoji}]
             "ts": now_ts(),
         }
         data["messages"].append(record)
@@ -677,6 +679,152 @@ def list_birthdays():
         )
     result.sort(key=lambda b: b["days_until"])
     return {"birthdays": result}
+
+
+class ReactIn(BaseModel):
+    user: str
+    emoji: str = Field(min_length=1, max_length=8)
+
+
+@app.post("/api/messages/{message_id}/react")
+def react_message(message_id: str, body: ReactIn):
+    with _lock:
+        data = load_data()
+        msg = next(
+            (m for m in data["messages"] if m["id"] == message_id), None
+        )
+        if msg is None:
+            raise HTTPException(status_code=404, detail="Message not found")
+        get_user_or_404(data, body.user)
+        reactions = msg.setdefault("reactions", [])
+        existing = next(
+            (r for r in reactions if r["user"] == body.user), None
+        )
+        if existing:
+            reactions.remove(existing)
+            if existing["emoji"] == body.emoji:
+                save_data(data)
+                return msg  # same emoji again = toggle off
+        reactions.append({"user": body.user, "emoji": body.emoji})
+        save_data(data)
+        return msg
+
+
+# ---------- voice calls (WebRTC signaling via polling) ----------
+
+CALL_TTL = 120  # seconds before a stale call doc is dropped
+
+
+def _prune_calls(data: dict) -> None:
+    cutoff = now_ts() - CALL_TTL
+    data["calls"] = [
+        c for c in data["calls"]
+        if c["ts"] > cutoff and c["state"] != "ended"
+    ]
+
+
+def _find_call(data: dict, call_id: str) -> dict:
+    for c in data["calls"]:
+        if c["id"] == call_id:
+            return c
+    raise HTTPException(status_code=404, detail="Call not found")
+
+
+class CallStart(BaseModel):
+    caller: str
+    callee: str
+    offer: dict
+
+
+class CallAnswer(BaseModel):
+    answer: dict
+
+
+class CallCand(BaseModel):
+    who: str  # "caller" or "callee"
+    candidate: dict
+
+
+@app.post("/api/calls", status_code=201)
+def start_call(body: CallStart):
+    with _lock:
+        data = load_data()
+        get_user_or_404(data, body.caller)
+        get_user_or_404(data, body.callee)
+        _prune_calls(data)
+        pair = {body.caller, body.callee}
+        data["calls"] = [
+            c for c in data["calls"]
+            if {c["caller"], c["callee"]} != pair
+        ]
+        call = {
+            "id": new_id(),
+            "caller": body.caller,
+            "callee": body.callee,
+            "offer": body.offer,
+            "answer": None,
+            "state": "ringing",
+            "cand_caller": [],
+            "cand_callee": [],
+            "ts": now_ts(),
+        }
+        data["calls"].append(call)
+        save_data(data)
+    return {"id": call["id"]}
+
+
+@app.get("/api/calls/incoming/{user_id}")
+def incoming_call(user_id: str):
+    data = load_data()
+    ringing = [
+        c for c in data["calls"]
+        if c["callee"] == user_id and c["state"] == "ringing"
+    ]
+    if not ringing:
+        return {"call": None}
+    call = ringing[-1]
+    names = {u["id"]: u["name"] for u in data["users"]}
+    return {"call": {**call, "caller_name": names.get(call["caller"], "?")}}
+
+
+@app.get("/api/calls/{call_id}")
+def get_call(call_id: str):
+    data = load_data()
+    return _find_call(data, call_id)
+
+
+@app.post("/api/calls/{call_id}/answer")
+def answer_call(call_id: str, body: CallAnswer):
+    with _lock:
+        data = load_data()
+        call = _find_call(data, call_id)
+        call["answer"] = body.answer
+        call["state"] = "active"
+        save_data(data)
+    return {"ok": True}
+
+
+@app.post("/api/calls/{call_id}/candidate")
+def add_candidate(call_id: str, body: CallCand):
+    with _lock:
+        data = load_data()
+        call = _find_call(data, call_id)
+        key = "cand_caller" if body.who == "caller" else "cand_callee"
+        call[key].append(body.candidate)
+        save_data(data)
+    return {"ok": True}
+
+
+@app.post("/api/calls/{call_id}/end")
+def end_call(call_id: str):
+    with _lock:
+        data = load_data()
+        for c in data["calls"]:
+            if c["id"] == call_id:
+                c["state"] = "ended"
+                save_data(data)
+                break
+    return {"ok": True}
 
 
 @app.get("/api/version")

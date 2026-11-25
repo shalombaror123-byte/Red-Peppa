@@ -43,6 +43,17 @@ export const api = {
   deleteMessage: (id) => request(`/messages/${id}`, { method: 'DELETE' }),
   editMessage: (id, body) =>
     request(`/messages/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  reactMessage: (id, body) =>
+    request(`/messages/${id}/react`, { method: 'POST', body: JSON.stringify(body) }),
+  startCall: (body) =>
+    request('/calls', { method: 'POST', body: JSON.stringify(body) }),
+  incomingCall: (userId) => request(`/calls/incoming/${userId}`),
+  getCall: (id) => request(`/calls/${id}`),
+  answerCall: (id, body) =>
+    request(`/calls/${id}/answer`, { method: 'POST', body: JSON.stringify(body) }),
+  callCandidate: (id, body) =>
+    request(`/calls/${id}/candidate`, { method: 'POST', body: JSON.stringify(body) }),
+  endCall: (id) => request(`/calls/${id}/end`, { method: 'POST' }),
   uploadMedia: (data) => request('/media', { method: 'POST', body: JSON.stringify({ data }) }),
 
   // boards

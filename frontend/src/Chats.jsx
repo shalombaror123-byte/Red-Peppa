@@ -13,6 +13,8 @@ const EMOJIS = [
   '💖', '💘', '👍', '👎', '👏', '🙌', '🙏', '💪', '🤝', '✌️', '🤞', '👋',
 ]
 
+const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
 const STICKERS = [
   '🌶️', '🔥', '🎉', '🎂', '🎈', '🏆', '⚽', '🏀', '🎮', '🎸', '🍕', '🍔',
   '🍩', '☕', '💯', '👑', '🚀', '⭐', '🌈', '☀️', '🌙', '⚡', '🎁', '🏅',
@@ -102,7 +104,7 @@ function ChatList({ me, onOpen, unread }) {
   )
 }
 
-function ChatWindow({ me, chat, onBack }) {
+function ChatWindow({ me, chat, onBack, onCall }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [error, setError] = useState(null)
@@ -225,6 +227,16 @@ function ChatWindow({ me, chat, onBack }) {
     }
   }
 
+  const react = async (m, emoji) => {
+    setMsgMenu(null)
+    try {
+      await api.reactMessage(m.id, { user: me.id, emoji })
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const insertEmoji = (e) => setText((t) => t + e)
 
   const sendSticker = async (emoji) => {
@@ -255,29 +267,59 @@ function ChatWindow({ me, chat, onBack }) {
           {chat.group ? '👥' : chat.name[0]?.toUpperCase()}
         </span>
         <strong>{chat.name}</strong>
+        {!chat.group && onCall && (
+          <button
+            className="link call-btn"
+            onClick={() => onCall(chat)}
+            title="Voice call"
+          >
+            📞
+          </button>
+        )}
       </div>
 
       <div className="messages">
+        {msgMenu && (
+          <div className="msg-overlay" onClick={() => setMsgMenu(null)} />
+        )}
         {messages.map((m) => (
           <div
             key={m.id}
-            className={`bubble ${m.sender === me.id ? 'mine' : 'theirs'}`}
+            className={`bubble ${m.sender === me.id ? 'mine' : 'theirs'}${msgMenu === m.id ? ' menu-open' : ''}`}
           >
-            {m.sender === me.id && (
-              <span className="msg-menu-wrap">
-                <button
-                  className="msg-menu-btn"
-                  onClick={() =>
-                    setMsgMenu(msgMenu === m.id ? null : m.id)
-                  }
-                  title="Message options"
-                >
-                  ⋮
-                </button>
-                {msgMenu === m.id && (
-                  <span className="msg-menu">
-                    {(m.kind || 'text') === 'text' && (
+            <span className="msg-menu-wrap">
+              <button
+                className="msg-menu-btn"
+                onClick={() =>
+                  setMsgMenu(msgMenu === m.id ? null : m.id)
+                }
+                title="Message options"
+              >
+                ⋮
+              </button>
+              {msgMenu === m.id && (
+                <span className="msg-menu">
+                  <span className="react-row">
+                    {REACT_EMOJIS.map((e) => (
                       <button
+                        key={e}
+                        className={
+                          (m.reactions || []).some(
+                            (r) => r.user === me.id && r.emoji === e
+                          )
+                            ? 'react-btn mine'
+                            : 'react-btn'
+                        }
+                        onClick={() => react(m, e)}
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </span>
+                  {m.sender === me.id &&
+                    (m.kind || 'text') === 'text' && (
+                      <button
+                        className="menu-item"
                         onClick={() => {
                           setEditing(m)
                           setText(m.text)
@@ -287,8 +329,9 @@ function ChatWindow({ me, chat, onBack }) {
                         Edit
                       </button>
                     )}
+                  {m.sender === me.id && (
                     <button
-                      className="danger"
+                      className="menu-item danger"
                       onClick={() => {
                         setMsgMenu(null)
                         deleteMsg(m.id)
@@ -296,10 +339,10 @@ function ChatWindow({ me, chat, onBack }) {
                     >
                       Delete
                     </button>
-                  </span>
-                )}
-              </span>
-            )}
+                  )}
+                </span>
+              )}
+            </span>
             {chat.group && m.sender !== me.id && (
               <div className="bubble-sender">{m.sender_name}</div>
             )}
@@ -310,6 +353,27 @@ function ChatWindow({ me, chat, onBack }) {
               <div className="bubble-sticker">{m.text}</div>
             ) : (
               m.text && <div className="bubble-text">{m.text}</div>
+            )}
+            {(m.reactions || []).length > 0 && (
+              <div className="reactions">
+                {Object.entries(
+                  m.reactions.reduce((acc, r) => {
+                    acc[r.emoji] = acc[r.emoji] || { count: 0, mine: false }
+                    acc[r.emoji].count++
+                    if (r.user === me.id) acc[r.emoji].mine = true
+                    return acc
+                  }, {})
+                ).map(([emoji, info]) => (
+                  <button
+                    key={emoji}
+                    className={info.mine ? 'reaction-chip mine' : 'reaction-chip'}
+                    onClick={() => react(m, emoji)}
+                  >
+                    {emoji}
+                    {info.count > 1 && ` ${info.count}`}
+                  </button>
+                ))}
+              </div>
             )}
             <div className="bubble-time">
               {m.edited && <span className="edited-tag">edited</span>}
@@ -421,7 +485,7 @@ function ChatWindow({ me, chat, onBack }) {
   )
 }
 
-export default function Chats({ me, onChatRead, unread }) {
+export default function Chats({ me, onChatRead, unread, onCall }) {
   const [openChat, setOpenChat] = useState(null)
 
   const open = (c) => {
@@ -430,7 +494,14 @@ export default function Chats({ me, onChatRead, unread }) {
   }
 
   if (openChat) {
-    return <ChatWindow me={me} chat={openChat} onBack={() => setOpenChat(null)} />
+    return (
+      <ChatWindow
+        me={me}
+        chat={openChat}
+        onBack={() => setOpenChat(null)}
+        onCall={onCall}
+      />
+    )
   }
 
   return <ChatList me={me} onOpen={open} unread={unread} />

@@ -7,37 +7,14 @@ import Directory from './Directory'
 import { PostBoard } from './Boards'
 import Jokes from './Jokes'
 import Birthdays from './Birthdays'
+import CallManager from './Call'
+import { playDing, resumeAudio } from './sound'
 import './App.css'
 
 const STORAGE_KEY = 'class-app-user-id'
 const THEME_KEY = 'class-app-theme'
 
-let audioCtx = null
 
-// Soft "pling" for incoming messages, synthesized so no audio file is
-// needed. Bell-like: a bright strike with a faint harmonic shimmer and a
-// smooth decay — in the spirit of Google Chat's notification.
-const playDing = () => {
-  try {
-    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)()
-    if (audioCtx.state === 'suspended') audioCtx.resume()
-    const t = audioCtx.currentTime
-    for (const [freq, vol, decay] of [[1568, 0.18, 0.45], [3136, 0.05, 0.25]]) {
-      const osc = audioCtx.createOscillator()
-      const gain = audioCtx.createGain()
-      osc.type = 'sine'
-      osc.frequency.value = freq
-      gain.gain.setValueAtTime(0.0001, t)
-      gain.gain.exponentialRampToValueAtTime(vol, t + 0.006)
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + decay)
-      osc.connect(gain).connect(audioCtx.destination)
-      osc.start(t)
-      osc.stop(t + decay + 0.05)
-    }
-  } catch {
-    // audio unsupported / still locked — skip silently
-  }
-}
 
 function ModeTabs({ theme, onToggle }) {
   return (
@@ -74,6 +51,7 @@ export default function App() {
   const [me, setMe] = useState(null)
   const [tab, setTab] = useState('chats')
   const [annUnread, setAnnUnread] = useState(false)
+  const [callPeer, setCallPeer] = useState(null)
   const [error, setError] = useState(null)
   const [theme, setTheme] = useState(
     () => localStorage.getItem(THEME_KEY) || 'dark'
@@ -284,7 +262,7 @@ export default function App() {
   // context on any tap so the first ding isn't silent.
   useEffect(() => {
     const unlock = () => {
-      if (audioCtx?.state === 'suspended') audioCtx.resume()
+      resumeAudio()
     }
     document.addEventListener('pointerdown', unlock)
     return () => document.removeEventListener('pointerdown', unlock)
@@ -356,7 +334,12 @@ export default function App() {
 
       <main className="tab-content" key={tab}>
         {tab === 'chats' && (
-          <Chats me={me} onChatRead={markChatRead} unread={unreadChats.current} />
+          <Chats
+            me={me}
+            onChatRead={markChatRead}
+            unread={unreadChats.current}
+            onCall={setCallPeer}
+          />
         )}
         {tab === 'important' && (
           <PostBoard
@@ -401,6 +384,11 @@ export default function App() {
         {tab === 'birthdays' && <Birthdays />}
       </main>
       {footer}
+      <CallManager
+        me={me}
+        outgoing={callPeer}
+        onDone={() => setCallPeer(null)}
+      />
     </div>
   )
 }
