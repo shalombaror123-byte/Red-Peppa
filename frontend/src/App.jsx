@@ -137,6 +137,45 @@ export default function App() {
     logout()
   }, [me, users, logout])
 
+  // Watch for new incoming messages and fire a browser notification when
+  // the user isn't looking at the tab (same as WhatsApp Web).
+  const lastMsgTs = useRef({})
+  useEffect(() => {
+    if (!me) return
+    lastMsgTs.current = {}
+    let alive = true
+    const check = async () => {
+      try {
+        const d = await api.getChatList(me.id)
+        if (!alive) return
+        const map = lastMsgTs.current
+        for (const c of d.chats) {
+          const prev = map[c.id]
+          map[c.id] = c.last_ts
+          if (prev === undefined || c.last_ts <= prev || c.last_mine) continue
+          if (
+            'Notification' in window &&
+            Notification.permission === 'granted' &&
+            !(document.visibilityState === 'visible' && document.hasFocus())
+          ) {
+            new Notification(c.name, {
+              body: c.last_kind === 'image' ? '📷 Photo' : c.last_text,
+              icon: '/pepper.png',
+            })
+          }
+        }
+      } catch {
+        // ignore transient poll errors
+      }
+    }
+    check()
+    const t = setInterval(check, 5000)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [me])
+
   if (!me) {
     return (
       <Login

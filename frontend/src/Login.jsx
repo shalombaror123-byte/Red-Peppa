@@ -20,8 +20,15 @@ export default function Login({ users, error, onLogin, onRefresh, footer }) {
     setFormError(null)
   }
 
+  const askNotifyPermission = () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }
+
   const submitLogin = async (e) => {
     e.preventDefault()
+    askNotifyPermission()
     setBusy(true)
     setFormError(null)
     try {
@@ -36,6 +43,7 @@ export default function Login({ users, error, onLogin, onRefresh, footer }) {
 
   const join = async (e) => {
     e.preventDefault()
+    askNotifyPermission()
     setBusy(true)
     setFormError(null)
     try {

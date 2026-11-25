@@ -784,6 +784,14 @@ a {
   word-break: break-word;
 }
 
+.bubble-img {
+  display: block;
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+
 .bubble-time {
   font-size: 0.68rem;
   color: rgb(255 255 255 / 55%);

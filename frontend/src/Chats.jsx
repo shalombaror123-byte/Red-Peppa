@@ -1,8 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from './api'
+import { api, mediaUrl } from './api'
 import { fmtTime } from './time'
 
 const POLL_MS = 2000
+
+// Shrink a picked image before upload: JPEG at max 900px keeps KV small.
+// GIFs pass through untouched (compressing would kill the animation).
+function compressImage(file) {
+  if (file.type === 'image/gif') {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(r.result)
+      r.onerror = reject
+      r.readAsDataURL(file)
+    })
+  }
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const scale = Math.min(1, 900 / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      resolve(canvas.toDataURL('image/jpeg', 0.75))
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
 
 function ChatList({ me, onOpen }) {
   const [chats, setChats] = useState(null)
@@ -42,7 +70,9 @@ function ChatList({ me, onOpen }) {
                   {c.seen ? '✓✓ ' : '✓ '}
                 </span>
               )}
-              {c.last_text || 'Say hi!'}
+              {c.last_kind === 'image'
+                ? `📷 Photo${c.last_text ? `: ${c.last_text}` : ''}`
+                : c.last_text || 'Say hi!'}
             </span>
           </span>
           {c.last_ts > 0 && <span className="chat-item-time">{fmtTime(c.last_ts)}</span>}
@@ -56,7 +86,9 @@ function ChatWindow({ me, chat, onBack }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
   const bottomRef = useRef(null)
+  const fileRef = useRef(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -94,6 +126,54 @@ function ChatWindow({ me, chat, onBack }) {
     }
   }
 
+  const sendImage = async (media) => {
+    setBusy(true)
+    try {
+      await api.sendMessage({
+        sender: me.id,
+        to: chat.id,
+        text: text.trim(),
+        kind: 'image',
+        media,
+      })
+      setText('')
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pickFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true)
+    try {
+      const dataUrl = await compressImage(file)
+      const { id } = await api.uploadMedia(dataUrl)
+      await api.sendMessage({
+        sender: me.id,
+        to: chat.id,
+        text: text.trim(),
+        kind: 'image',
+        media: `media:${id}`,
+      })
+      setText('')
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  const sendLink = () => {
+    const url = window.prompt('Paste an image or GIF link')
+    const trimmed = url?.trim()
+    if (trimmed && /^https?:\/\//.test(trimmed)) sendImage(trimmed)
+  }
+
   return (
     <div className="chat-window">
       <div className="chat-header">
@@ -115,7 +195,10 @@ function ChatWindow({ me, chat, onBack }) {
             {chat.group && m.sender !== me.id && (
               <div className="bubble-sender">{m.sender_name}</div>
             )}
-            <div className="bubble-text">{m.text}</div>
+            {m.kind === 'image' && m.media && (
+              <img className="bubble-img" src={mediaUrl(m.media)} alt="photo" />
+            )}
+            {m.text && <div className="bubble-text">{m.text}</div>}
             <div className="bubble-time">
               {fmtTime(m.ts)}
               {m.sender === me.id && (
@@ -135,13 +218,32 @@ function ChatWindow({ me, chat, onBack }) {
       {error && <div className="banner error">{error}</div>}
 
       <form className="composer" onSubmit={send}>
+        <button
+          type="button"
+          className="link"
+          onClick={() => fileRef.current?.click()}
+          aria-label="Send a photo"
+          disabled={busy}
+        >
+          📎
+        </button>
+        <button type="button" className="link" onClick={sendLink} disabled={busy}>
+          GIF
+        </button>
         <input
           placeholder="Type a message…"
           value={text}
           onChange={(e) => setText(e.target.value)}
           autoFocus
         />
-        <button className="primary" type="submit">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={pickFile}
+        />
+        <button className="primary" type="submit" disabled={busy}>
           Send
         </button>
       </form>

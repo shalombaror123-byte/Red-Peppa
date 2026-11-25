@@ -9,6 +9,7 @@ filesystem) it uses an Upstash KV (Redis) store if the env vars are set —
 same pattern as the portfolio backend.
 """
 
+import base64
 import hashlib
 import json
 import os
@@ -21,7 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 import requests
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -165,7 +166,13 @@ class LoginIn(BaseModel):
 class MessageIn(BaseModel):
     sender: str
     to: str  # "group" or a user id
-    text: str = Field(min_length=1, max_length=2000)
+    text: str = Field(default="", max_length=2000)
+    kind: str = Field(default="text", max_length=10)
+    media: str = Field(default="", max_length=2000)
+
+
+class MediaIn(BaseModel):
+    data: str = Field(min_length=10, max_length=3_000_000)  # data URL
 
 
 class PostIn(BaseModel):
@@ -315,6 +322,57 @@ def dm_messages(other_id: str, me: str, since: float = 0):
     return {"messages": msgs}
 
 
+# ---------- media (photos / gifs) ----------
+
+MEDIA_DIR = Path(__file__).parent / "media"
+MEDIA_PREFIX = "red-peppa-media:"
+
+
+@app.post("/api/media", status_code=201)
+def upload_media(media: MediaIn):
+    if not media.data.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Only image data is allowed")
+    mid = new_id()
+    blob = json.dumps(media.data)
+    if USE_KV:
+        r = requests.post(
+            f"{KV_URL}/set/{MEDIA_PREFIX}{mid}",
+            headers={**_KV_HEADERS, "Content-Type": "application/json"},
+            data=blob,
+            timeout=15,
+        )
+        r.raise_for_status()
+    else:
+        MEDIA_DIR.mkdir(exist_ok=True)
+        (MEDIA_DIR / mid).write_text(media.data)
+    return {"id": mid}
+
+
+@app.get("/api/media/{media_id}")
+def get_media(media_id: str):
+    if not media_id.isalnum() or len(media_id) > 20:
+        raise HTTPException(status_code=404, detail="Not found")
+    if USE_KV:
+        r = requests.get(
+            f"{KV_URL}/get/{MEDIA_PREFIX}{media_id}", headers=_KV_HEADERS, timeout=10
+        )
+        result = r.json().get("result")
+        if result is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        data_url = json.loads(result)
+    else:
+        f = MEDIA_DIR / media_id
+        if not f.exists():
+            raise HTTPException(status_code=404, detail="Not found")
+        data_url = f.read_text().strip()
+    try:
+        header, b64 = data_url.split(",", 1)
+        mime = header[5:].split(";")[0] or "image/jpeg"
+        return Response(content=base64.b64decode(b64), media_type=mime)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 @app.post("/api/messages", status_code=201)
 def send_message(msg: MessageIn):
     with _lock:
@@ -322,11 +380,24 @@ def send_message(msg: MessageIn):
         get_user_or_404(data, msg.sender)
         if msg.to != "group":
             get_user_or_404(data, msg.to)
+        text = msg.text.strip()
+        kind = msg.kind if msg.kind in ("text", "image") else "text"
+        media = msg.media.strip()
+        if kind == "text" and not text:
+            raise HTTPException(status_code=400, detail="Message text is required")
+        if kind == "image" and not (
+            media.startswith("media:")
+            or media.startswith("http://")
+            or media.startswith("https://")
+        ):
+            raise HTTPException(status_code=400, detail="Image needs a media id or URL")
         record = {
             "id": new_id(),
             "sender": msg.sender,
             "to": msg.to,
-            "text": msg.text.strip(),
+            "text": text,
+            "kind": kind,
+            "media": media if kind == "image" else "",
             "ts": now_ts(),
         }
         data["messages"].append(record)
@@ -365,6 +436,7 @@ def chat_list(user_id: str):
                 "group": False,
                 "last_text": last["text"] if last else "",
                 "last_ts": last["ts"] if last else 0,
+                "last_kind": last.get("kind", "text") if last else "text",
                 "last_mine": bool(last and last["sender"] == user_id),
                 "seen": bool(last and last["sender"] == user_id and uid in last.get("seen_by", {})),
             }
@@ -384,6 +456,7 @@ def chat_list(user_id: str):
             "group": True,
             "last_text": last_group["text"] if last_group else "",
             "last_ts": last_group["ts"] if last_group else 0,
+            "last_kind": last_group.get("kind", "text") if last_group else "text",
             "last_mine": bool(last_group and last_group["sender"] == user_id),
             "seen": group_seen,
         },

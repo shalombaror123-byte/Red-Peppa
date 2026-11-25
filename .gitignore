@@ -9,6 +9,7 @@ __pycache__/
 
 # runtime data & secrets (Vercel uses Upstash KV instead)
 data.json
+media/
 .env
 
 # os
