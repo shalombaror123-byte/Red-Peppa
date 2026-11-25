@@ -1,28 +1,38 @@
 let audioCtx = null
 
-// Soft "pling" for incoming messages/calls, synthesized so no audio file
-// is needed. Bell-like: a bright strike with a faint harmonic shimmer and
-// a smooth decay — in the spirit of Google Chat's notification.
+// One mallet-style note: a warm triangle fundamental with a soft fourth
+// harmonic for the "strike", run through a lowpass so it isn't harsh.
+const note = (ctx, t, freq, vol, dur) => {
+  const lp = ctx.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.frequency.value = 3400
+  lp.connect(ctx.destination)
+  for (const [mult, g, dec] of [
+    [1, vol, dur],
+    [4, vol * 0.22, dur * 0.3],
+  ]) {
+    const o = ctx.createOscillator()
+    const e = ctx.createGain()
+    o.type = mult === 1 ? 'triangle' : 'sine'
+    o.frequency.value = freq * mult
+    e.gain.setValueAtTime(0.0001, t)
+    e.gain.exponentialRampToValueAtTime(g, t + 0.005)
+    e.gain.exponentialRampToValueAtTime(0.0001, t + dec)
+    o.connect(e).connect(lp)
+    o.start(t)
+    o.stop(t + dec + 0.05)
+  }
+}
+
+// Warm two-note chime for incoming messages/calls — a soft rising
+// interval (E5 -> B5), synthesized so no audio file is needed.
 export const playDing = () => {
   try {
     audioCtx ??= new (window.AudioContext || window.webkitAudioContext)()
     if (audioCtx.state === 'suspended') audioCtx.resume()
     const t = audioCtx.currentTime
-    for (const [freq, vol, decay] of [
-      [1568, 0.45, 0.5],
-      [3136, 0.14, 0.3],
-    ]) {
-      const osc = audioCtx.createOscillator()
-      const gain = audioCtx.createGain()
-      osc.type = 'sine'
-      osc.frequency.value = freq
-      gain.gain.setValueAtTime(0.0001, t)
-      gain.gain.exponentialRampToValueAtTime(vol, t + 0.006)
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + decay)
-      osc.connect(gain).connect(audioCtx.destination)
-      osc.start(t)
-      osc.stop(t + decay + 0.05)
-    }
+    note(audioCtx, t, 659.25, 0.4, 0.55)
+    note(audioCtx, t + 0.09, 987.77, 0.34, 0.7)
   } catch {
     // audio unsupported / still locked — skip silently
   }
