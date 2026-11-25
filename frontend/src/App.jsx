@@ -9,6 +9,7 @@ import Jokes from './Jokes'
 import Birthdays from './Birthdays'
 import Reports from './Reports'
 import CallManager from './Call'
+import CallLog from './CallLog'
 import { playDing, resumeAudio } from './sound'
 import './App.css'
 
@@ -38,6 +39,7 @@ function ModeTabs({ theme, onToggle }) {
 
 const TABS = [
   { id: 'chats', label: 'Chats' },
+  { id: 'calls', label: 'Calls' },
   { id: 'important', label: 'Important' },
   { id: 'reports', label: 'Reports' },
   { id: 'status', label: 'Status' },
@@ -54,6 +56,7 @@ export default function App() {
   const [tab, setTab] = useState('chats')
   const [annUnread, setAnnUnread] = useState(false)
   const [repUnread, setRepUnread] = useState(false)
+  const [callsUnread, setCallsUnread] = useState(false)
   const [callPeer, setCallPeer] = useState(null)
   const [warning, setWarning] = useState(null)
   const [error, setError] = useState(null)
@@ -204,11 +207,12 @@ export default function App() {
     let alive = true
     const check = async () => {
       try {
-        const [d, ann, reps, warns] = await Promise.all([
+        const [d, ann, reps, warns, clog] = await Promise.all([
           api.getChatList(me.id),
           api.getAnnouncements(),
           me.admin ? api.getReports() : Promise.resolve({ reports: [] }),
           api.getWarnings(me.id),
+          api.getCallLog(me.id),
         ])
         if (!alive) return
         const map = lastMsgTs.current
@@ -240,6 +244,34 @@ export default function App() {
         }
         const unseenWarn = (warns.warnings || [])[0]
         if (unseenWarn) setWarning(unseenWarn)
+        const missedCalls = (clog.calls || []).filter(
+          (c) => c.callee === me.id && !c.answered
+        )
+        if (missedCalls[0]) {
+          const prev = map['__call']
+          map['__call'] = missedCalls[0].ts
+          if (prev !== undefined && missedCalls[0].ts > prev) {
+            playDing()
+            setCallsUnread(true)
+            if (
+              !(document.visibilityState === 'visible' && document.hasFocus())
+            ) {
+              unreadChats.current.add('calls')
+              setBadge(unreadChats.current.size)
+              if (
+                'Notification' in window &&
+                Notification.permission === 'granted'
+              ) {
+                new Notification('📞 Missed call', {
+                  body: `${missedCalls[0].caller_name} tried to ${
+                    missedCalls[0].video ? 'video ' : ''
+                  }call you`,
+                  icon: '/pepper.png',
+                })
+              }
+            }
+          }
+        }
         const newest = ann.announcements[0]
         if (newest) {
           const prev = map['__ann']
@@ -359,6 +391,10 @@ export default function App() {
                   setRepUnread(false)
                   markChatRead('reports')
                 }
+                if (t.id === 'calls') {
+                  setCallsUnread(false)
+                  markChatRead('calls')
+                }
               }}
             >
               {t.label}
@@ -368,6 +404,7 @@ export default function App() {
               {t.id === 'reports' && repUnread && (
                 <span className="tab-dot" />
               )}
+              {t.id === 'calls' && callsUnread && <span className="tab-dot" />}
             </button>
           ))}
         </nav>
@@ -391,6 +428,7 @@ export default function App() {
             itemsKey="announcements"
           />
         )}
+        {tab === 'calls' && <CallLog me={me} onCall={setCallPeer} />}
         {tab === 'reports' && me.admin && <Reports />}
         {tab === 'status' && (
           <Statuses

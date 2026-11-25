@@ -1547,3 +1547,45 @@ a {
 .presence.online {
   color: #22c55e;
 }
+
+.call-log {
+  display: flex;
+  flex-direction: column;
+}
+
+.call-log-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.call-log-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.call-log-body small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.call-log-body .missed,
+.call-log-body small.missed {
+  color: #ef4444;
+}
+
+.call-log-time {
+  color: var(--muted);
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+.call-back {
+  font-size: 1.3rem;
+  text-decoration: none;
+  padding: 4px;
+}

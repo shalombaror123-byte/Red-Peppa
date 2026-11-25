@@ -76,6 +76,7 @@ EMPTY_DATA = {
     "study": [],      # {id, author, subject, text, ts}
     "announcements": [],  # {id, author, text, ts}
     "calls": [],      # {id, caller, callee, offer, answer, state, cand_caller, cand_callee, ts}
+    "call_log": [],   # {id, caller, callee, video, ts, answered, ended_ts}
     "reports": [],    # {id, reporter, reported, message_id, message_text, ts, status}
     "warnings": [],   # {id, user, text, ts, seen}
     "typing": {},     # {chat_id: {user_id: ts}}
@@ -775,13 +776,35 @@ def react_message(message_id: str, body: ReactIn):
 CALL_TTL = 120  # seconds before a stale call doc is dropped
 
 
+def _log_call(data: dict, call: dict) -> None:
+    """Append a finished call to the call log (deduped, capped at 100)."""
+    log = data.setdefault("call_log", [])
+    if any(e["id"] == call["id"] for e in log):
+        return
+    log.append(
+        {
+            "id": call["id"],
+            "caller": call["caller"],
+            "callee": call["callee"],
+            "video": bool(call.get("video")),
+            "ts": call["ts"],
+            "answered": call["state"] == "active",
+            "ended_ts": now_ts(),
+        }
+    )
+    del log[:-100]
+
+
 def _prune_calls(data: dict) -> None:
     cutoff = now_ts() - CALL_TTL
-    data["calls"] = [
+    dropped = [
         c for c in data["calls"]
-        if c["state"] != "ended"
-        and not (c["state"] == "ringing" and c["ts"] < cutoff)
+        if c["state"] == "ended"
+        or (c["state"] == "ringing" and c["ts"] < cutoff)
     ]
+    data["calls"] = [c for c in data["calls"] if c not in dropped]
+    for c in dropped:
+        _log_call(data, c)
 
 
 def _find_call(data: dict, call_id: str) -> dict:
@@ -815,10 +838,16 @@ def start_call(body: CallStart):
         get_user_or_404(data, body.callee)
         _prune_calls(data)
         pair = {body.caller, body.callee}
+        replaced = [
+            c for c in data["calls"]
+            if {c["caller"], c["callee"]} == pair
+        ]
         data["calls"] = [
             c for c in data["calls"]
             if {c["caller"], c["callee"]} != pair
         ]
+        for c in replaced:
+            _log_call(data, c)
         call = {
             "id": new_id(),
             "caller": body.caller,
@@ -887,10 +916,29 @@ def end_call(call_id: str):
         data = load_data()
         for c in data["calls"]:
             if c["id"] == call_id:
+                _log_call(data, c)
                 c["state"] = "ended"
                 save_data(data)
                 break
     return {"ok": True}
+
+
+@app.get("/api/calls/log/{user_id}")
+def call_log(user_id: str):
+    """Recent calls involving this user, newest first."""
+    data = load_data()
+    get_user_or_404(data, user_id)
+    names = {u["id"]: u["name"] for u in data["users"]}
+    entries = [
+        {
+            **e,
+            "caller_name": names.get(e["caller"], "?"),
+            "callee_name": names.get(e["callee"], "?"),
+        }
+        for e in reversed(data.get("call_log", []))
+        if user_id in (e["caller"], e["callee"])
+    ]
+    return {"calls": entries}
 
 
 class HandIn(BaseModel):
