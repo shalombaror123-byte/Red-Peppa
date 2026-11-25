@@ -854,6 +854,8 @@ def start_call(body: CallStart):
             "callee": body.callee,
             "offer": body.offer,
             "answer": None,
+            "offer2": None,  # renegotiation offer (voice -> video upgrade)
+            "answer2": None,
             "state": "ringing",
             "video": body.video,
             "hand_caller": False,
@@ -895,6 +897,32 @@ def answer_call(call_id: str, body: CallAnswer):
         call = _find_call(data, call_id)
         call["answer"] = body.answer
         call["state"] = "active"
+        save_data(data)
+    return {"ok": True}
+
+
+class SdpIn(BaseModel):
+    sdp: dict
+
+
+@app.post("/api/calls/{call_id}/offer2")
+def reoffer_call(call_id: str, body: SdpIn):
+    """Mid-call renegotiation offer — used to upgrade voice -> video."""
+    with _lock:
+        data = load_data()
+        call = _find_call(data, call_id)
+        call["offer2"] = body.sdp
+        call["video"] = True
+        save_data(data)
+    return {"ok": True}
+
+
+@app.post("/api/calls/{call_id}/answer2")
+def reanswer_call(call_id: str, body: SdpIn):
+    with _lock:
+        data = load_data()
+        call = _find_call(data, call_id)
+        call["answer2"] = body.sdp
         save_data(data)
     return {"ok": True}
 

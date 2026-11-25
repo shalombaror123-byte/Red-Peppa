@@ -37,6 +37,9 @@ export default function CallManager({ me, outgoing, onDone }) {
   const answeredRef = useRef(false)
   const pendingCands = useRef([])
   const connTimeoutRef = useRef(null)
+  const offer2HandledRef = useRef(false)
+  const waitingAnswer2Ref = useRef(false)
+  const [upgrading, setUpgrading] = useState(false)
 
   const stopAll = useCallback(() => {
     clearInterval(pollRef.current)
@@ -50,6 +53,9 @@ export default function CallManager({ me, outgoing, onDone }) {
     streamRef.current = null
     callIdRef.current = null
     answeredRef.current = false
+    offer2HandledRef.current = false
+    waitingAnswer2Ref.current = false
+    setUpgrading(false)
     pendingCands.current = []
     videoSenderRef.current = null
     camTrackRef.current = null
@@ -177,6 +183,47 @@ export default function CallManager({ me, outgoing, onDone }) {
             answeredRef.current = true
             await pcRef.current?.setRemoteDescription(c.answer)
             setActive((a) => (a ? { ...a, status: 'connecting…' } : a))
+          }
+          // Mid-call upgrade: peer offered video on a running voice call.
+          if (c.offer2 && !offer2HandledRef.current) {
+            offer2HandledRef.current = true
+            try {
+              await pcRef.current?.setRemoteDescription(c.offer2)
+              try {
+                const cam = await navigator.mediaDevices.getUserMedia({
+                  video: { width: { ideal: 640 } },
+                })
+                const track = cam.getVideoTracks()[0]
+                streamRef.current.addTrack(track)
+                camTrackRef.current = track
+                videoSenderRef.current = pcRef.current.addTrack(
+                  track,
+                  streamRef.current
+                )
+                setCamOn(true)
+              } catch {
+                // camera denied — we still receive their video one-way
+              }
+              await pcRef.current.setLocalDescription(
+                await pcRef.current.createAnswer()
+              )
+              await api.answer2Call(callId, {
+                sdp: pcRef.current.localDescription,
+              })
+              setActive((a) => (a ? { ...a, video: true } : a))
+            } catch {
+              offer2HandledRef.current = false
+            }
+          }
+          // Our upgrade offer was answered.
+          if (c.answer2 && waitingAnswer2Ref.current) {
+            waitingAnswer2Ref.current = false
+            try {
+              await pcRef.current?.setRemoteDescription(c.answer2)
+              setActive((a) => (a ? { ...a, video: true } : a))
+            } catch {
+              // bad answer — stay on voice
+            }
           }
           setRemoteHand(Boolean(c[remoteHand]))
           setCallChat(c.chat || [])
@@ -316,6 +363,36 @@ export default function CallManager({ me, outgoing, onDone }) {
       t.enabled = !micOn
       setMicOn(!micOn)
     }
+  }
+
+  // Upgrade a running voice call to video: add a camera track to the
+  // live peer connection and renegotiate through the call doc.
+  const switchToVideo = async () => {
+    if (upgrading) return
+    setUpgrading(true)
+    try {
+      const cam = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 } },
+      })
+      const track = cam.getVideoTracks()[0]
+      streamRef.current.addTrack(track)
+      camTrackRef.current = track
+      videoSenderRef.current = pcRef.current.addTrack(
+        track,
+        streamRef.current
+      )
+      setCamOn(true)
+      await pcRef.current.setLocalDescription(
+        await pcRef.current.createOffer()
+      )
+      waitingAnswer2Ref.current = true
+      await api.offer2Call(callIdRef.current, {
+        sdp: pcRef.current.localDescription,
+      })
+    } catch {
+      // camera denied or renegotiation failed — stay on voice
+    }
+    setUpgrading(false)
   }
 
   const toggleCam = () => {
@@ -470,7 +547,7 @@ export default function CallManager({ me, outgoing, onDone }) {
             <button onClick={toggleMic}>
               {micOn ? '🎤 Mute' : '🔇 Unmute'}
             </button>
-            {active.video && (
+            {active.video ? (
               <>
                 <button
                   onClick={toggleCam}
@@ -485,6 +562,10 @@ export default function CallManager({ me, outgoing, onDone }) {
                   {sharing ? '🖥️ Stop share' : '🖥️ Share'}
                 </button>
               </>
+            ) : (
+              <button onClick={switchToVideo} disabled={upgrading}>
+                {upgrading ? '📹 Adding…' : '📹 Switch to video'}
+              </button>
             )}
             <button onClick={toggleHand} className={handUp ? 'on' : ''}>
               {handUp ? '✋ Hand down' : '✋ Hand'}
