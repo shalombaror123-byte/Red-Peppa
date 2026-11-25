@@ -23,10 +23,13 @@ export default function CallManager({ me, outgoing, onDone }) {
   const callIdRef = useRef(null)
   const answeredRef = useRef(false)
   const pendingCands = useRef([])
+  const connTimeoutRef = useRef(null)
 
   const stopAll = useCallback(() => {
     clearInterval(pollRef.current)
     pollRef.current = null
+    clearTimeout(connTimeoutRef.current)
+    connTimeoutRef.current = null
     stopRing(ringRef)
     pcRef.current?.close()
     pcRef.current = null
@@ -75,11 +78,27 @@ export default function CallManager({ me, outgoing, onDone }) {
       }
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'connected') {
+          clearTimeout(connTimeoutRef.current)
           setActive((a) => (a ? { ...a, status: 'in call' } : a))
         } else if (['failed', 'closed'].includes(pc.connectionState)) {
           endCall(callIdRef.current)
         }
       }
+      // If no connection within 30s, say so instead of spinning forever.
+      clearTimeout(connTimeoutRef.current)
+      connTimeoutRef.current = setTimeout(() => {
+        if (pcRef.current?.connectionState === 'connected') return
+        setActive((a) =>
+          a
+            ? {
+                ...a,
+                status:
+                  a.status === 'calling…' ? 'no answer' : "couldn't connect",
+              }
+            : a
+        )
+        setTimeout(() => endCall(callIdRef.current), 3500)
+      }, 30000)
       streamRef.current
         .getTracks()
         .forEach((t) => pc.addTrack(t, streamRef.current))

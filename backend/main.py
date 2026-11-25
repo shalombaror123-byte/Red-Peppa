@@ -719,7 +719,8 @@ def _prune_calls(data: dict) -> None:
     cutoff = now_ts() - CALL_TTL
     data["calls"] = [
         c for c in data["calls"]
-        if c["ts"] > cutoff and c["state"] != "ended"
+        if c["state"] != "ended"
+        and not (c["state"] == "ringing" and c["ts"] < cutoff)
     ]
 
 
