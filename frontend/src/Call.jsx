@@ -6,18 +6,30 @@ const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
 const RING_FRESH_SEC = 45 // ignore ringing calls older than this
 
 /**
- * Voice-call manager: polls the backend for incoming calls, runs the
- * WebRTC handshake (offer/answer/candidates are relayed through the API),
- * and renders the incoming-call and in-call overlays.
+ * Video-call manager: polls the backend for incoming calls, runs the
+ * WebRTC handshake (offer/answer/candidates/hand/chat are relayed through
+ * the API), and renders the incoming-call and in-call overlays.
  * `outgoing` is {id, name} of the user to call; `onDone` clears it.
  */
 export default function CallManager({ me, outgoing, onDone }) {
   const [incoming, setIncoming] = useState(null)
   const [active, setActive] = useState(null) // {id, peerName, role, status}
   const [seconds, setSeconds] = useState(0)
+  const [micOn, setMicOn] = useState(true)
+  const [camOn, setCamOn] = useState(true)
+  const [sharing, setSharing] = useState(false)
+  const [handUp, setHandUp] = useState(false)
+  const [remoteHand, setRemoteHand] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [callChat, setCallChat] = useState([])
+  const [chatDraft, setChatDraft] = useState('')
   const pcRef = useRef(null)
   const streamRef = useRef(null)
-  const audioRef = useRef(null)
+  const remoteRef = useRef(null)
+  const localRef = useRef(null)
+  const videoSenderRef = useRef(null)
+  const camTrackRef = useRef(null)
+  const chatBottomRef = useRef(null)
   const pollRef = useRef(null)
   const ringRef = useRef(null)
   const callIdRef = useRef(null)
@@ -38,9 +50,19 @@ export default function CallManager({ me, outgoing, onDone }) {
     callIdRef.current = null
     answeredRef.current = false
     pendingCands.current = []
+    videoSenderRef.current = null
+    camTrackRef.current = null
     setActive(null)
     setIncoming(null)
     setSeconds(0)
+    setMicOn(true)
+    setCamOn(true)
+    setSharing(false)
+    setHandUp(false)
+    setRemoteHand(false)
+    setChatOpen(false)
+    setCallChat([])
+    setChatDraft('')
     onDone?.()
   }, [onDone])
 
@@ -58,6 +80,18 @@ export default function CallManager({ me, outgoing, onDone }) {
     [stopAll]
   )
 
+  const getMedia = async () => {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: { width: { ideal: 640 } },
+      })
+    } catch {
+      // no camera / denied — fall back to audio-only
+      return await navigator.mediaDevices.getUserMedia({ audio: true })
+    }
+  }
+
   const attachPC = useCallback(
     (who) => {
       const pc = new RTCPeerConnection(RTC_CONFIG)
@@ -74,7 +108,7 @@ export default function CallManager({ me, outgoing, onDone }) {
         }
       }
       pc.ontrack = (e) => {
-        if (audioRef.current) audioRef.current.srcObject = e.streams[0]
+        if (remoteRef.current) remoteRef.current.srcObject = e.streams[0]
       }
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'connected') {
@@ -102,6 +136,11 @@ export default function CallManager({ me, outgoing, onDone }) {
       streamRef.current
         .getTracks()
         .forEach((t) => pc.addTrack(t, streamRef.current))
+      videoSenderRef.current =
+        pc.getSenders().find((s) => s.track?.kind === 'video') || null
+      camTrackRef.current =
+        streamRef.current.getVideoTracks()[0] || null
+      setCamOn(Boolean(camTrackRef.current))
       return pc
     },
     [endCall]
@@ -115,9 +154,9 @@ export default function CallManager({ me, outgoing, onDone }) {
   }
 
   // Both sides poll the call doc: caller waits for the answer, everyone
-  // drains the other side's ICE candidates and watches for "ended".
+  // drains the other side's ICE candidates, hand flag, and chat.
   const pollCall = useCallback(
-    (callId, remoteKey, role) => {
+    (callId, remoteKey, remoteHand, role) => {
       let consumed = 0
       clearInterval(pollRef.current)
       pollRef.current = setInterval(async () => {
@@ -131,6 +170,8 @@ export default function CallManager({ me, outgoing, onDone }) {
             answeredRef.current = true
             await pcRef.current?.setRemoteDescription(c.answer)
           }
+          setRemoteHand(Boolean(c[remoteHand]))
+          setCallChat(c.chat || [])
           const list = c[remoteKey] || []
           for (; consumed < list.length; consumed++) {
             try {
@@ -169,21 +210,20 @@ export default function CallManager({ me, outgoing, onDone }) {
     return () => clearInterval(t)
   }, [me, active, incoming])
 
-  // Outgoing call: mic → offer → POST call → poll for answer.
+  // Outgoing call: media → offer → POST call → poll for answer.
   useEffect(() => {
     if (!outgoing || active) return
     let cancelled = false
     ;(async () => {
       try {
-        streamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        })
+        streamRef.current = await getMedia()
         const pc = attachPC('caller')
         await pc.setLocalDescription(await pc.createOffer())
         const { id } = await api.startCall({
           caller: me.id,
           callee: outgoing.id,
           offer: pc.localDescription,
+          video: true,
         })
         callIdRef.current = id
         flushCands(id, 'caller')
@@ -197,7 +237,7 @@ export default function CallManager({ me, outgoing, onDone }) {
           role: 'caller',
           status: 'calling…',
         })
-        pollCall(id, 'cand_callee', 'caller')
+        pollCall(id, 'cand_callee', 'hand_callee', 'caller')
       } catch {
         if (!cancelled) stopAll()
       }
@@ -213,9 +253,7 @@ export default function CallManager({ me, outgoing, onDone }) {
     stopRing(ringRef)
     setIncoming(null)
     try {
-      streamRef.current = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      })
+      streamRef.current = await getMedia()
       callIdRef.current = call.id
       const pc = attachPC('callee')
       await pc.setRemoteDescription(call.offer)
@@ -228,7 +266,7 @@ export default function CallManager({ me, outgoing, onDone }) {
         role: 'callee',
         status: 'connecting…',
       })
-      pollCall(call.id, 'cand_caller', 'callee')
+      pollCall(call.id, 'cand_caller', 'hand_caller', 'callee')
     } catch {
       stopAll()
     }
@@ -238,6 +276,84 @@ export default function CallManager({ me, outgoing, onDone }) {
     api.endCall(incoming.id).catch(() => {})
     stopAll()
   }
+
+  // Attach local video preview whenever the call overlay is up.
+  useEffect(() => {
+    if (active && localRef.current && streamRef.current) {
+      localRef.current.srcObject = streamRef.current
+    }
+  }, [active, camOn])
+
+  const toggleMic = () => {
+    const t = streamRef.current?.getAudioTracks()[0]
+    if (t) {
+      t.enabled = !micOn
+      setMicOn(!micOn)
+    }
+  }
+
+  const toggleCam = () => {
+    const t = camTrackRef.current
+    if (t) {
+      t.enabled = !camOn
+      setCamOn(!camOn)
+    }
+  }
+
+  const toggleShare = async () => {
+    if (!sharing) {
+      try {
+        const screen = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+        })
+        const track = screen.getVideoTracks()[0]
+        track.onended = () => {
+          videoSenderRef.current
+            ?.replaceTrack(camTrackRef.current)
+            .catch(() => {})
+          setSharing(false)
+        }
+        await videoSenderRef.current?.replaceTrack(track)
+        setSharing(true)
+      } catch {
+        // user cancelled the picker — stay on camera
+      }
+    } else {
+      await videoSenderRef.current?.replaceTrack(camTrackRef.current)
+      setSharing(false)
+    }
+  }
+
+  const toggleHand = () => {
+    const up = !handUp
+    setHandUp(up)
+    api
+      .handCall(callIdRef.current, {
+        who: active.role,
+        up,
+      })
+      .catch(() => {})
+  }
+
+  const sendCallChat = async (e) => {
+    e.preventDefault()
+    const text = chatDraft.trim()
+    if (!text) return
+    setChatDraft('')
+    try {
+      await api.chatCall(callIdRef.current, {
+        who: active.role,
+        name: me.name,
+        text,
+      })
+    } catch {
+      // transient — message drops, acceptable
+    }
+  }
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [callChat.length])
 
   // In-call duration timer.
   useEffect(() => {
@@ -250,13 +366,14 @@ export default function CallManager({ me, outgoing, onDone }) {
 
   return (
     <>
-      <audio ref={audioRef} autoPlay hidden />
       {incoming && (
         <div className="call-overlay">
           <div className="call-card">
-            <div className="call-icon">📞</div>
+            <div className="call-icon">📹</div>
             <div className="call-name">{incoming.caller_name}</div>
-            <div className="muted">is calling you</div>
+            <div className="muted">
+              {incoming.video ? 'is video calling you' : 'is calling you'}
+            </div>
             <div className="call-actions">
               <button className="call-accept" onClick={accept}>
                 Accept
@@ -269,21 +386,88 @@ export default function CallManager({ me, outgoing, onDone }) {
         </div>
       )}
       {active && (
-        <div className="call-overlay">
-          <div className="call-card">
-            <div className="call-icon">📞</div>
-            <div className="call-name">{active.peerName}</div>
-            <div className="muted">
-              {active.status === 'in call' ? `In call — ${clock}` : active.status}
+        <div className="call-overlay video">
+          <video ref={remoteRef} autoPlay playsInline className="remote-video" />
+          <video
+            ref={localRef}
+            autoPlay
+            playsInline
+            muted
+            className="local-video"
+          />
+          {(remoteHand || handUp) && (
+            <div className="hand-banner">
+              ✋ {remoteHand ? `${active.peerName} raised a hand` : 'You raised a hand'}
             </div>
-            <div className="call-actions">
-              <button
-                className="call-decline"
-                onClick={() => endCall(active.id)}
-              >
-                End call
-              </button>
+          )}
+          <div className="call-status-line">
+            {active.peerName} —{' '}
+            {active.status === 'in call' ? clock : active.status}
+          </div>
+          {chatOpen && (
+            <div className="call-chat">
+              <div className="call-chat-msgs">
+                {callChat.map((cm, i) => (
+                  <div key={i} className="call-chat-msg">
+                    <strong>{cm.name}:</strong> {cm.text}
+                  </div>
+                ))}
+                {callChat.length === 0 && (
+                  <div className="muted small">No messages yet</div>
+                )}
+                <div ref={chatBottomRef} />
+              </div>
+              <form className="call-chat-form" onSubmit={sendCallChat}>
+                <input
+                  placeholder="Message…"
+                  value={chatDraft}
+                  onChange={(e) => setChatDraft(e.target.value)}
+                />
+                <button type="submit" className="link">
+                  Send
+                </button>
+              </form>
             </div>
+          )}
+          <div className="call-controls">
+            <button onClick={toggleMic} title={micOn ? 'Mute' : 'Unmute'}>
+              {micOn ? '🎤' : '🔇'}
+            </button>
+            <button
+              onClick={toggleCam}
+              title={camOn ? 'Camera off' : 'Camera on'}
+              disabled={!camTrackRef.current}
+            >
+              {camOn ? '📹' : '📷'}
+            </button>
+            <button
+              onClick={toggleShare}
+              title="Share screen"
+              className={sharing ? 'on' : ''}
+            >
+              🖥️
+            </button>
+            <button
+              onClick={toggleHand}
+              title="Raise hand"
+              className={handUp ? 'on' : ''}
+            >
+              ✋
+            </button>
+            <button
+              onClick={() => setChatOpen((o) => !o)}
+              title="Call chat"
+              className={chatOpen ? 'on' : ''}
+            >
+              💬
+            </button>
+            <button
+              className="call-decline"
+              onClick={() => endCall(active.id)}
+              title="End call"
+            >
+              📵
+            </button>
           </div>
         </div>
       )}

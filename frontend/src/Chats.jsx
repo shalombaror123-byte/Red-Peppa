@@ -115,6 +115,8 @@ function ChatWindow({ me, chat, onBack, onCall }) {
   const [editing, setEditing] = useState(null)
   const [reactFor, setReactFor] = useState(null)
   const [replyTo, setReplyTo] = useState(null)
+  const [typing, setTyping] = useState([])
+  const typingSent = useRef(0)
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
   const pickerRef = useRef(null)
@@ -136,6 +138,7 @@ function ChatWindow({ me, chat, onBack, onCall }) {
         ? await api.getGroupMessages(me.id)
         : await api.getDmMessages(chat.id, me.id)
       setMessages(d.messages)
+      setTyping(d.typing || [])
       setError(null)
     } catch (err) {
       setError(err.message)
@@ -461,6 +464,12 @@ function ChatWindow({ me, chat, onBack, onCall }) {
 
       {error && <div className="banner error">{error}</div>}
 
+      {typing.length > 0 && (
+        <div className="typing-line">
+          {typing.join(', ')} {typing.length === 1 ? 'is' : 'are'} typing…
+        </div>
+      )}
+
       <div className="composer-area" ref={pickerRef}>
         {editing && (
           <div className="editing-bar">
@@ -545,7 +554,16 @@ function ChatWindow({ me, chat, onBack, onCall }) {
         <input
           placeholder="Type a message…"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value)
+            const now = Date.now()
+            if (now - typingSent.current > 3000) {
+              typingSent.current = now
+              api
+                .sendTyping({ user: me.id, to: chat.id })
+                .catch(() => {})
+            }
+          }}
           autoFocus
         />
         <input

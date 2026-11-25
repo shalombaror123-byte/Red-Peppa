@@ -54,6 +54,12 @@ export const api = {
   callCandidate: (id, body) =>
     request(`/calls/${id}/candidate`, { method: 'POST', body: JSON.stringify(body) }),
   endCall: (id) => request(`/calls/${id}/end`, { method: 'POST' }),
+  handCall: (id, body) =>
+    request(`/calls/${id}/hand`, { method: 'POST', body: JSON.stringify(body) }),
+  chatCall: (id, body) =>
+    request(`/calls/${id}/chat`, { method: 'POST', body: JSON.stringify(body) }),
+  sendTyping: (body) =>
+    request('/typing', { method: 'POST', body: JSON.stringify(body) }),
   reportMessage: (body) =>
     request('/reports', { method: 'POST', body: JSON.stringify(body) }),
   getReports: () => request('/reports'),

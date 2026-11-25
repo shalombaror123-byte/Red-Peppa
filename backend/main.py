@@ -78,6 +78,7 @@ EMPTY_DATA = {
     "calls": [],      # {id, caller, callee, offer, answer, state, cand_caller, cand_callee, ts}
     "reports": [],    # {id, reporter, reported, message_id, message_text, ts, status}
     "warnings": [],   # {id, user, text, ts, seen}
+    "typing": {},     # {chat_id: {user_id: ts}}
 }
 
 
@@ -303,7 +304,13 @@ def group_messages(since: float = 0, me: str = ""):
         msgs.append({**m, "sender_name": names.get(m["sender"], "?"), "seen": seen})
     if changed:
         save_data(data)
-    return {"messages": msgs}
+    cutoff = now_ts() - 8
+    typing = [
+        names.get(uid, "?")
+        for uid, ts in data.get("typing", {}).get("group", {}).items()
+        if ts > cutoff and uid != me
+    ]
+    return {"messages": msgs, "typing": typing}
 
 
 @app.get("/api/messages/dm/{other_id}")
@@ -325,7 +332,29 @@ def dm_messages(other_id: str, me: str, since: float = 0):
         )
     if changed:
         save_data(data)
-    return {"messages": msgs}
+    cutoff = now_ts() - 8
+    ts = data.get("typing", {}).get(me, {}).get(other_id, 0)
+    typing = [names.get(other_id, "?")] if ts > cutoff else []
+    return {"messages": msgs, "typing": typing}
+
+
+class TypingIn(BaseModel):
+    user: str
+    to: str
+
+
+@app.post("/api/typing", status_code=204)
+def set_typing(body: TypingIn):
+    with _lock:
+        data = load_data()
+        t = data.setdefault("typing", {})
+        cutoff = now_ts() - 30
+        for chat_key in t:
+            t[chat_key] = {
+                uid: ts for uid, ts in t[chat_key].items() if ts > cutoff
+            }
+        t.setdefault(body.to, {})[body.user] = now_ts()
+        save_data(data)
 
 
 # ---------- media (photos / gifs) ----------
@@ -740,6 +769,7 @@ class CallStart(BaseModel):
     caller: str
     callee: str
     offer: dict
+    video: bool = False
 
 
 class CallAnswer(BaseModel):
@@ -770,6 +800,10 @@ def start_call(body: CallStart):
             "offer": body.offer,
             "answer": None,
             "state": "ringing",
+            "video": body.video,
+            "hand_caller": False,
+            "hand_callee": False,
+            "chat": [],  # [{who, name, text, ts}]
             "cand_caller": [],
             "cand_callee": [],
             "ts": now_ts(),
@@ -830,6 +864,45 @@ def end_call(call_id: str):
                 c["state"] = "ended"
                 save_data(data)
                 break
+    return {"ok": True}
+
+
+class HandIn(BaseModel):
+    who: str
+    up: bool
+
+
+class CallChatIn(BaseModel):
+    who: str
+    name: str
+    text: str = Field(min_length=1, max_length=500)
+
+
+@app.post("/api/calls/{call_id}/hand")
+def raise_hand(call_id: str, body: HandIn):
+    with _lock:
+        data = load_data()
+        call = _find_call(data, call_id)
+        key = "hand_caller" if body.who == "caller" else "hand_callee"
+        call[key] = body.up
+        save_data(data)
+    return {"ok": True}
+
+
+@app.post("/api/calls/{call_id}/chat")
+def call_chat(call_id: str, body: CallChatIn):
+    with _lock:
+        data = load_data()
+        call = _find_call(data, call_id)
+        call.setdefault("chat", []).append(
+            {
+                "who": body.who,
+                "name": body.name,
+                "text": body.text.strip(),
+                "ts": now_ts(),
+            }
+        )
+        save_data(data)
     return {"ok": True}
 
 
