@@ -76,6 +76,8 @@ EMPTY_DATA = {
     "study": [],      # {id, author, subject, text, ts}
     "announcements": [],  # {id, author, text, ts}
     "calls": [],      # {id, caller, callee, offer, answer, state, cand_caller, cand_callee, ts}
+    "reports": [],    # {id, reporter, reported, message_id, message_text, ts, status}
+    "warnings": [],   # {id, user, text, ts, seen}
 }
 
 
@@ -132,6 +134,7 @@ def public_user(u: dict) -> dict:
         "birthday": u["birthday"],
         "status": u.get("status", ""),
         "status_ts": u.get("status_ts", 0),
+        "admin": bool(u.get("admin")),
     }
 
 
@@ -171,6 +174,7 @@ class MessageIn(BaseModel):
     text: str = Field(default="", max_length=2000)
     kind: str = Field(default="text", max_length=10)
     media: str = Field(default="", max_length=2000)
+    reply_to: Optional[dict] = None  # {name, text} snapshot of quoted message
 
 
 class MediaIn(BaseModel):
@@ -401,6 +405,7 @@ def send_message(msg: MessageIn):
             "kind": kind,
             "media": media if kind == "image" else "",
             "reactions": [],  # [{user, emoji}]
+            "reply_to": msg.reply_to,
             "ts": now_ts(),
         }
         data["messages"].append(record)
@@ -825,6 +830,115 @@ def end_call(call_id: str):
                 c["state"] = "ended"
                 save_data(data)
                 break
+    return {"ok": True}
+
+
+# ---------- reports & warnings ----------
+
+
+class ReportIn(BaseModel):
+    reporter: str
+    message_id: str
+
+
+class ResolveIn(BaseModel):
+    warn: bool = False
+    text: str = Field(default="", max_length=500)
+
+
+@app.post("/api/reports", status_code=201)
+def create_report(body: ReportIn):
+    with _lock:
+        data = load_data()
+        get_user_or_404(data, body.reporter)
+        msg = next(
+            (m for m in data["messages"] if m["id"] == body.message_id), None
+        )
+        if msg is None:
+            raise HTTPException(status_code=404, detail="Message not found")
+        dup = any(
+            r["reporter"] == body.reporter
+            and r["message_id"] == body.message_id
+            and r["status"] == "pending"
+            for r in data["reports"]
+        )
+        if dup:
+            raise HTTPException(status_code=409, detail="Already reported")
+        record = {
+            "id": new_id(),
+            "reporter": body.reporter,
+            "reported": msg["sender"],
+            "message_id": msg["id"],
+            "message_text": (msg.get("text") or "📷 Photo")[:300],
+            "ts": now_ts(),
+            "status": "pending",
+        }
+        data["reports"].append(record)
+        save_data(data)
+    return record
+
+
+@app.get("/api/reports")
+def list_reports():
+    data = load_data()
+    names = {u["id"]: u["name"] for u in data["users"]}
+    items = [
+        {
+            **r,
+            "reporter_name": names.get(r["reporter"], "?"),
+            "reported_name": names.get(r["reported"], "?"),
+        }
+        for r in data["reports"]
+    ]
+    items.sort(key=lambda r: r["ts"], reverse=True)
+    return {"reports": items}
+
+
+@app.post("/api/reports/{report_id}/resolve")
+def resolve_report(report_id: str, body: ResolveIn):
+    with _lock:
+        data = load_data()
+        rep = next(
+            (r for r in data["reports"] if r["id"] == report_id), None
+        )
+        if rep is None:
+            raise HTTPException(status_code=404, detail="Report not found")
+        rep["status"] = "resolved"
+        if body.warn:
+            data["warnings"].append(
+                {
+                    "id": new_id(),
+                    "user": rep["reported"],
+                    "text": body.text.strip()
+                    or "You received a warning for a reported message.",
+                    "ts": now_ts(),
+                    "seen": False,
+                }
+            )
+        save_data(data)
+    return {"ok": True}
+
+
+@app.get("/api/warnings/{user_id}")
+def get_warnings(user_id: str):
+    data = load_data()
+    return {
+        "warnings": [
+            w
+            for w in data["warnings"]
+            if w["user"] == user_id and not w["seen"]
+        ]
+    }
+
+
+@app.post("/api/warnings/{warning_id}/seen")
+def ack_warning(warning_id: str):
+    with _lock:
+        data = load_data()
+        for w in data["warnings"]:
+            if w["id"] == warning_id:
+                w["seen"] = True
+        save_data(data)
     return {"ok": True}
 
 

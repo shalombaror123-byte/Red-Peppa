@@ -113,6 +113,8 @@ function ChatWindow({ me, chat, onBack, onCall }) {
   const [pickerTab, setPickerTab] = useState('emoji')
   const [msgMenu, setMsgMenu] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [reactFor, setReactFor] = useState(null)
+  const [replyTo, setReplyTo] = useState(null)
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
   const pickerRef = useRef(null)
@@ -160,7 +162,13 @@ function ChatWindow({ me, chat, onBack, onCall }) {
         await api.editMessage(editing.id, { text: trimmed })
         setEditing(null)
       } else {
-        await api.sendMessage({ sender: me.id, to: chat.id, text: trimmed })
+        await api.sendMessage({
+          sender: me.id,
+          to: chat.id,
+          text: trimmed,
+          reply_to: replyTo,
+        })
+        setReplyTo(null)
       }
       await refresh()
     } catch (err) {
@@ -237,6 +245,18 @@ function ChatWindow({ me, chat, onBack, onCall }) {
     }
   }
 
+  const reportMsg = async (m) => {
+    const name = m.sender_name || chat.name
+    if (!window.confirm(`Report this message from ${name} to the admin?`))
+      return
+    try {
+      await api.reportMessage({ reporter: me.id, message_id: m.id })
+      window.alert('Reported — the admin will review it.')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const insertEmoji = (e) => setText((t) => t + e)
 
   const sendSticker = async (emoji) => {
@@ -290,61 +310,110 @@ function ChatWindow({ me, chat, onBack, onCall }) {
             <span className="msg-menu-wrap">
               <button
                 className="msg-menu-btn"
-                onClick={() =>
+                onClick={() => {
                   setMsgMenu(msgMenu === m.id ? null : m.id)
-                }
+                  setReactFor(null)
+                }}
                 title="Message options"
               >
                 ⋮
               </button>
               {msgMenu === m.id && (
                 <span className="msg-menu">
-                  <span className="react-row">
-                    {REACT_EMOJIS.map((e) => (
+                  {reactFor === m.id ? (
+                    <span className="react-row">
+                      {REACT_EMOJIS.map((e) => (
+                        <button
+                          key={e}
+                          className={
+                            (m.reactions || []).some(
+                              (r) => r.user === me.id && r.emoji === e
+                            )
+                              ? 'react-btn mine'
+                              : 'react-btn'
+                          }
+                          onClick={() => react(m, e)}
+                        >
+                          {e}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <>
                       <button
-                        key={e}
-                        className={
-                          (m.reactions || []).some(
-                            (r) => r.user === me.id && r.emoji === e
-                          )
-                            ? 'react-btn mine'
-                            : 'react-btn'
-                        }
-                        onClick={() => react(m, e)}
+                        className="menu-item"
+                        onClick={() => setReactFor(m.id)}
                       >
-                        {e}
+                        😀 React
                       </button>
-                    ))}
-                  </span>
-                  {m.sender === me.id &&
-                    (m.kind || 'text') === 'text' && (
                       <button
                         className="menu-item"
                         onClick={() => {
-                          setEditing(m)
-                          setText(m.text)
+                          setReplyTo({
+                            name:
+                              m.sender === me.id
+                                ? me.name
+                                : m.sender_name || chat.name,
+                            text:
+                              m.kind === 'image'
+                                ? '📷 Photo'
+                                : (m.text || '').slice(0, 80),
+                          })
+                          setEditing(null)
                           setMsgMenu(null)
                         }}
                       >
-                        Edit
+                        ↩ Reply
                       </button>
-                    )}
-                  {m.sender === me.id && (
-                    <button
-                      className="menu-item danger"
-                      onClick={() => {
-                        setMsgMenu(null)
-                        deleteMsg(m.id)
-                      }}
-                    >
-                      Delete
-                    </button>
+                      {m.sender !== me.id && (
+                        <button
+                          className="menu-item"
+                          onClick={() => {
+                            setMsgMenu(null)
+                            reportMsg(m)
+                          }}
+                        >
+                          🚩 Report
+                        </button>
+                      )}
+                      {m.sender === me.id &&
+                        (m.kind || 'text') === 'text' && (
+                          <button
+                            className="menu-item"
+                            onClick={() => {
+                              setEditing(m)
+                              setText(m.text)
+                              setReplyTo(null)
+                              setMsgMenu(null)
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      {m.sender === me.id && (
+                        <button
+                          className="menu-item danger"
+                          onClick={() => {
+                            setMsgMenu(null)
+                            deleteMsg(m.id)
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </>
                   )}
                 </span>
               )}
             </span>
             {chat.group && m.sender !== me.id && (
               <div className="bubble-sender">{m.sender_name}</div>
+            )}
+            {m.reply_to && (
+              <div className="reply-quote">
+                <strong>{m.reply_to.name}</strong>
+                <div>{m.reply_to.text}</div>
+              </div>
             )}
             {m.kind === 'image' && m.media && (
               <img className="bubble-img" src={mediaUrl(m.media)} alt="photo" />
@@ -403,6 +472,16 @@ function ChatWindow({ me, chat, onBack, onCall }) {
                 setText('')
               }}
             >
+              ✕
+            </button>
+          </div>
+        )}
+        {replyTo && (
+          <div className="editing-bar">
+            <span>
+              Replying to <strong>{replyTo.name}</strong>: {replyTo.text}
+            </span>
+            <button className="link" onClick={() => setReplyTo(null)}>
               ✕
             </button>
           </div>

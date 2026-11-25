@@ -7,6 +7,7 @@ import Directory from './Directory'
 import { PostBoard } from './Boards'
 import Jokes from './Jokes'
 import Birthdays from './Birthdays'
+import Reports from './Reports'
 import CallManager from './Call'
 import { playDing, resumeAudio } from './sound'
 import './App.css'
@@ -38,6 +39,7 @@ function ModeTabs({ theme, onToggle }) {
 const TABS = [
   { id: 'chats', label: 'Chats' },
   { id: 'important', label: 'Important' },
+  { id: 'reports', label: 'Reports' },
   { id: 'status', label: 'Status' },
   { id: 'directory', label: 'Directory' },
   { id: 'news', label: 'News' },
@@ -51,7 +53,9 @@ export default function App() {
   const [me, setMe] = useState(null)
   const [tab, setTab] = useState('chats')
   const [annUnread, setAnnUnread] = useState(false)
+  const [repUnread, setRepUnread] = useState(false)
   const [callPeer, setCallPeer] = useState(null)
+  const [warning, setWarning] = useState(null)
   const [error, setError] = useState(null)
   const [theme, setTheme] = useState(
     () => localStorage.getItem(THEME_KEY) || 'dark'
@@ -200,12 +204,42 @@ export default function App() {
     let alive = true
     const check = async () => {
       try {
-        const [d, ann] = await Promise.all([
+        const [d, ann, reps, warns] = await Promise.all([
           api.getChatList(me.id),
           api.getAnnouncements(),
+          me.admin ? api.getReports() : Promise.resolve({ reports: [] }),
+          api.getWarnings(me.id),
         ])
         if (!alive) return
         const map = lastMsgTs.current
+        const newestRep = (reps.reports || []).find(
+          (r) => r.status === 'pending'
+        )
+        if (newestRep) {
+          const prev = map['__rep']
+          map['__rep'] = newestRep.ts
+          if (prev !== undefined && newestRep.ts > prev) {
+            playDing()
+            setRepUnread(true)
+            if (
+              !(document.visibilityState === 'visible' && document.hasFocus())
+            ) {
+              unreadChats.current.add('reports')
+              setBadge(unreadChats.current.size)
+            }
+            if (
+              'Notification' in window &&
+              Notification.permission === 'granted'
+            ) {
+              new Notification('🚩 New report', {
+                body: `${newestRep.reporter_name} reported ${newestRep.reported_name}`,
+                icon: '/pepper.png',
+              })
+            }
+          }
+        }
+        const unseenWarn = (warns.warnings || [])[0]
+        if (unseenWarn) setWarning(unseenWarn)
         const newest = ann.announcements[0]
         if (newest) {
           const prev = map['__ann']
@@ -311,7 +345,7 @@ export default function App() {
           </div>
         </div>
         <nav className="tabs">
-          {TABS.map((t) => (
+          {TABS.filter((t) => t.id !== 'reports' || me?.admin).map((t) => (
             <button
               key={t.id}
               className={tab === t.id ? 'tab active' : 'tab'}
@@ -321,10 +355,17 @@ export default function App() {
                   setAnnUnread(false)
                   markChatRead('important')
                 }
+                if (t.id === 'reports') {
+                  setRepUnread(false)
+                  markChatRead('reports')
+                }
               }}
             >
               {t.label}
               {t.id === 'important' && annUnread && (
+                <span className="tab-dot" />
+              )}
+              {t.id === 'reports' && repUnread && (
                 <span className="tab-dot" />
               )}
             </button>
@@ -350,6 +391,7 @@ export default function App() {
             itemsKey="announcements"
           />
         )}
+        {tab === 'reports' && me.admin && <Reports />}
         {tab === 'status' && (
           <Statuses
             me={me}
@@ -389,6 +431,26 @@ export default function App() {
         outgoing={callPeer}
         onDone={() => setCallPeer(null)}
       />
+      {warning && (
+        <div className="call-overlay">
+          <div className="call-card">
+            <div className="call-icon">⚠️</div>
+            <div className="call-name">Warning from admin</div>
+            <div className="muted">{warning.text}</div>
+            <div className="call-actions">
+              <button
+                className="primary"
+                onClick={() => {
+                  api.ackWarning(warning.id).catch(() => {})
+                  setWarning(null)
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

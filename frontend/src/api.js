@@ -54,6 +54,13 @@ export const api = {
   callCandidate: (id, body) =>
     request(`/calls/${id}/candidate`, { method: 'POST', body: JSON.stringify(body) }),
   endCall: (id) => request(`/calls/${id}/end`, { method: 'POST' }),
+  reportMessage: (body) =>
+    request('/reports', { method: 'POST', body: JSON.stringify(body) }),
+  getReports: () => request('/reports'),
+  resolveReport: (id, body) =>
+    request(`/reports/${id}/resolve`, { method: 'POST', body: JSON.stringify(body) }),
+  getWarnings: (userId) => request(`/warnings/${userId}`),
+  ackWarning: (id) => request(`/warnings/${id}/seen`, { method: 'POST' }),
   uploadMedia: (data) => request('/media', { method: 'POST', body: JSON.stringify({ data }) }),
 
   // boards
