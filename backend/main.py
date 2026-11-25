@@ -136,7 +136,21 @@ def public_user(u: dict) -> dict:
         "status": u.get("status", ""),
         "status_ts": u.get("status_ts", 0),
         "admin": bool(u.get("admin")),
+        "last_seen": u.get("last_seen", 0),
     }
+
+
+def touch_user(data: dict, uid: str) -> bool:
+    """Stamp last_seen on a user (throttled to ~15s). Returns True if changed."""
+    if not uid:
+        return False
+    for u in data["users"]:
+        if u["id"] == uid:
+            if now_ts() - u.get("last_seen", 0) > 15:
+                u["last_seen"] = now_ts()
+                return True
+            return False
+    return False
 
 
 def hash_password(password: str, salt: str) -> str:
@@ -291,7 +305,7 @@ def group_messages(since: float = 0, me: str = ""):
     data = load_data()
     names = {u["id"]: u["name"] for u in data["users"]}
     all_ids = set(names)
-    changed = False
+    changed = touch_user(data, me)
     msgs = []
     for m in data["messages"]:
         if m["to"] != "group" or m["ts"] <= since:
@@ -316,9 +330,10 @@ def group_messages(since: float = 0, me: str = ""):
 @app.get("/api/messages/dm/{other_id}")
 def dm_messages(other_id: str, me: str, since: float = 0):
     data = load_data()
-    names = {u["id"]: u["name"] for u in data["users"]}
+    users = {u["id"]: u for u in data["users"]}
+    names = {uid: u["name"] for uid, u in users.items()}
     pair = {me, other_id}
-    changed = False
+    changed = touch_user(data, me)
     msgs = []
     for m in data["messages"]:
         if m["to"] == "group" or {m["sender"], m["to"]} != pair or m["ts"] <= since:
@@ -335,7 +350,12 @@ def dm_messages(other_id: str, me: str, since: float = 0):
     cutoff = now_ts() - 8
     ts = data.get("typing", {}).get(me, {}).get(other_id, 0)
     typing = [names.get(other_id, "?")] if ts > cutoff else []
-    return {"messages": msgs, "typing": typing}
+    peer = users.get(other_id, {})
+    return {
+        "messages": msgs,
+        "typing": typing,
+        "peer_last_seen": peer.get("last_seen", 0),
+    }
 
 
 class TypingIn(BaseModel):
@@ -347,6 +367,7 @@ class TypingIn(BaseModel):
 def set_typing(body: TypingIn):
     with _lock:
         data = load_data()
+        touch_user(data, body.user)
         t = data.setdefault("typing", {})
         cutoff = now_ts() - 30
         for chat_key in t:
@@ -413,6 +434,7 @@ def send_message(msg: MessageIn):
     with _lock:
         data = load_data()
         get_user_or_404(data, msg.sender)
+        touch_user(data, msg.sender)
         if msg.to != "group":
             get_user_or_404(data, msg.to)
         text = msg.text.strip()
@@ -497,6 +519,8 @@ def chat_list(user_id: str):
     data = load_data()
     users = {u["id"]: u for u in data["users"]}
     get_user_or_404(data, user_id)
+    if touch_user(data, user_id):
+        save_data(data)
 
     last_group = None
     last_dm: dict[str, dict] = {}
@@ -524,6 +548,7 @@ def chat_list(user_id: str):
                 "last_kind": last.get("kind", "text") if last else "text",
                 "last_mine": bool(last and last["sender"] == user_id),
                 "seen": bool(last and last["sender"] == user_id and uid in last.get("seen_by", {})),
+                "last_seen": u.get("last_seen", 0),
             }
         )
     group_seen = bool(

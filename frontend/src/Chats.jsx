@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, mediaUrl } from './api'
-import { fmtTime } from './time'
+import { fmtLastSeen, fmtTime } from './time'
 
 const POLL_MS = 2000
 
@@ -127,6 +127,7 @@ function ChatWindow({ me, chat, onBack, onCall }) {
   const [reactFor, setReactFor] = useState(null)
   const [replyTo, setReplyTo] = useState(null)
   const [typing, setTyping] = useState([])
+  const [peerSeen, setPeerSeen] = useState(chat.last_seen || 0)
   const [callMenu, setCallMenu] = useState(false)
   const typingSent = useRef(0)
   const bottomRef = useRef(null)
@@ -151,6 +152,7 @@ function ChatWindow({ me, chat, onBack, onCall }) {
         : await api.getDmMessages(chat.id, me.id)
       setMessages(d.messages)
       setTyping(d.typing || [])
+      if (!chat.group) setPeerSeen(d.peer_last_seen || 0)
       setError(null)
     } catch (err) {
       setError(err.message)
@@ -317,7 +319,20 @@ function ChatWindow({ me, chat, onBack, onCall }) {
         <span className={`avatar ${chat.group ? 'group' : ''}`}>
           {chat.group ? '👥' : chat.name[0]?.toUpperCase()}
         </span>
-        <strong>{chat.name}</strong>
+        <span className="chat-peer">
+          <strong>{chat.name}</strong>
+          {!chat.group && (
+            <small
+              className={
+                peerSeen && Date.now() / 1000 - peerSeen < 75
+                  ? 'presence online'
+                  : 'presence'
+              }
+            >
+              {fmtLastSeen(peerSeen)}
+            </small>
+          )}
+        </span>
         {!chat.group && onCall && (
           <span className="call-menu-wrap">
             <button

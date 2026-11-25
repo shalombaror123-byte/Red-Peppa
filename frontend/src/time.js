@@ -19,6 +19,26 @@ export function fmtAgo(ts) {
   return `${Math.floor(s / 86400)}d ago`
 }
 
+export function fmtLastSeen(ts) {
+  if (!ts) return ''
+  if (Date.now() / 1000 - ts < 75) return 'online'
+  const d = new Date(ts * 1000)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  const sameDay = (a, b) =>
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear()
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (sameDay(d, today)) return `last seen today at ${time}`
+  if (sameDay(d, yesterday)) return `last seen yesterday at ${time}`
+  return `last seen ${d.toLocaleDateString([], {
+    day: 'numeric',
+    month: 'short',
+  })} at ${time}`
+}
+
 export function fmtDate(ts) {
   return new Date(ts * 1000).toLocaleString([], {
     month: 'short',
