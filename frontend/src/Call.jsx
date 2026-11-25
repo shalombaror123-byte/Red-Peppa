@@ -447,47 +447,39 @@ export default function CallManager({ me, outgoing, onDone }) {
             </div>
           )}
           <div className="call-controls">
-            <button onClick={toggleMic} title={micOn ? 'Mute' : 'Unmute'}>
-              {micOn ? '🎤' : '🔇'}
+            <button onClick={toggleMic}>
+              {micOn ? '🎤 Mute' : '🔇 Unmute'}
             </button>
             {active.video && (
               <>
                 <button
                   onClick={toggleCam}
-                  title={camOn ? 'Camera off' : 'Camera on'}
                   disabled={!camTrackRef.current}
                 >
-                  {camOn ? '📹' : '📷'}
+                  {camOn ? '📹 Camera' : '📷 Camera off'}
                 </button>
                 <button
                   onClick={toggleShare}
-                  title="Share screen"
                   className={sharing ? 'on' : ''}
                 >
-                  🖥️
+                  {sharing ? '🖥️ Stop share' : '🖥️ Share'}
                 </button>
               </>
             )}
-            <button
-              onClick={toggleHand}
-              title="Raise hand"
-              className={handUp ? 'on' : ''}
-            >
-              ✋
+            <button onClick={toggleHand} className={handUp ? 'on' : ''}>
+              {handUp ? '✋ Hand down' : '✋ Hand'}
             </button>
             <button
               onClick={() => setChatOpen((o) => !o)}
-              title="Call chat"
               className={chatOpen ? 'on' : ''}
             >
-              💬
+              💬 Chat
             </button>
             <button
               className="call-decline"
               onClick={() => endCall(active.id)}
-              title="End call"
             >
-              📵
+              End call
             </button>
           </div>
         </div>

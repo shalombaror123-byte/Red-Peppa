@@ -1137,21 +1137,26 @@ a {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 10px;
+  gap: 8px;
   z-index: 7;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 95vw;
 }
 
 .call-controls button {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  border-radius: 22px;
   border: 1px solid var(--border);
   background: rgba(30, 30, 30, 0.85);
-  font-size: 1.25rem;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 10px 14px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .call-controls button:hover {
