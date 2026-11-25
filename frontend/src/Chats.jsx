@@ -66,9 +66,7 @@ function ChatList({ me, onOpen }) {
             <span className="chat-item-name">{c.name}</span>
             <span className="chat-item-last">
               {c.last_mine && (
-                <span className={c.seen ? 'ticks seen' : 'ticks'}>
-                  {c.seen ? '✓✓ ' : '✓ '}
-                </span>
+                <span className={c.seen ? 'ticks seen' : 'ticks'}>✓✓ </span>
               )}
               {c.last_kind === 'image'
                 ? `📷 Photo${c.last_text ? `: ${c.last_text}` : ''}`
@@ -202,9 +200,7 @@ function ChatWindow({ me, chat, onBack }) {
             <div className="bubble-time">
               {fmtTime(m.ts)}
               {m.sender === me.id && (
-                <span className={m.seen ? 'ticks seen' : 'ticks'}>
-                  {m.seen ? '✓✓' : '✓'}
-                </span>
+                <span className={m.seen ? 'ticks seen' : 'ticks'}>✓✓</span>
               )}
             </div>
           </div>
