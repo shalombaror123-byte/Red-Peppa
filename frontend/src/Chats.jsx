@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, mediaUrl } from './api'
-import { fmtLastSeen, fmtTime } from './time'
+import { fmtLastSeen, fmtLastSeenShort, fmtTime } from './time'
 
 const POLL_MS = 2000
 
@@ -97,6 +97,18 @@ function ChatList({ me, onOpen, unread }) {
           <span className="chat-item-body">
             <span className="chat-item-name">
               {c.name}
+              {!c.group && c.last_seen > 0 && (
+                <small
+                  className={
+                    Date.now() / 1000 - c.last_seen < 75
+                      ? 'presence online'
+                      : 'presence'
+                  }
+                >
+                  {' '}
+                  · {fmtLastSeenShort(c.last_seen)}
+                </small>
+              )}
               {unread?.has(c.id) && <span className="unread-dot" />}
             </span>
             <span className="chat-item-last">

@@ -39,6 +39,27 @@ export function fmtLastSeen(ts) {
   })} at ${time}`
 }
 
+export function fmtLastSeenShort(ts) {
+  if (!ts) return ''
+  if (Date.now() / 1000 - ts < 75) return 'online'
+  const d = new Date(ts * 1000)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  const sameDay = (a, b) =>
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear()
+  if (sameDay(d, today)) {
+    return `seen ${d.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`
+  }
+  if (sameDay(d, yesterday)) return 'seen yesterday'
+  return `seen ${d.toLocaleDateString([], { day: 'numeric', month: 'short' })}`
+}
+
 export function fmtDate(ts) {
   return new Date(ts * 1000).toLocaleString([], {
     month: 'short',
