@@ -31,7 +31,7 @@ export const api = {
 
   // chats
   getChatList: (userId) => request(`/chats/${userId}`),
-  getGroupMessages: () => request('/messages/group'),
+  getGroupMessages: (me) => request(`/messages/group?me=${me}`),
   getDmMessages: (otherId, me) => request(`/messages/dm/${otherId}?me=${me}`),
   sendMessage: (msg) => request('/messages', { method: 'POST', body: JSON.stringify(msg) }),
 

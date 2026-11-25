@@ -273,14 +273,23 @@ def delete_user(user_id: str):
 
 
 @app.get("/api/messages/group")
-def group_messages(since: float = 0):
+def group_messages(since: float = 0, me: str = ""):
     data = load_data()
     names = {u["id"]: u["name"] for u in data["users"]}
-    msgs = [
-        {**m, "sender_name": names.get(m["sender"], "?")}
-        for m in data["messages"]
-        if m["to"] == "group" and m["ts"] > since
-    ]
+    all_ids = set(names)
+    changed = False
+    msgs = []
+    for m in data["messages"]:
+        if m["to"] != "group" or m["ts"] <= since:
+            continue
+        seen_by = m.setdefault("seen_by", {})
+        if me and me in all_ids and me != m["sender"] and me not in seen_by:
+            seen_by[me] = now_ts()
+            changed = True
+        seen = all(uid == m["sender"] or uid in seen_by for uid in all_ids)
+        msgs.append({**m, "sender_name": names.get(m["sender"], "?"), "seen": seen})
+    if changed:
+        save_data(data)
     return {"messages": msgs}
 
 
@@ -289,11 +298,20 @@ def dm_messages(other_id: str, me: str, since: float = 0):
     data = load_data()
     names = {u["id"]: u["name"] for u in data["users"]}
     pair = {me, other_id}
-    msgs = [
-        {**m, "sender_name": names.get(m["sender"], "?")}
-        for m in data["messages"]
-        if m["to"] != "group" and {m["sender"], m["to"]} == pair and m["ts"] > since
-    ]
+    changed = False
+    msgs = []
+    for m in data["messages"]:
+        if m["to"] == "group" or {m["sender"], m["to"]} != pair or m["ts"] <= since:
+            continue
+        seen_by = m.setdefault("seen_by", {})
+        if m["to"] == me and me not in seen_by:
+            seen_by[me] = now_ts()
+            changed = True
+        msgs.append(
+            {**m, "sender_name": names.get(m["sender"], "?"), "seen": other_id in seen_by}
+        )
+    if changed:
+        save_data(data)
     return {"messages": msgs}
 
 
@@ -334,6 +352,7 @@ def chat_list(user_id: str):
         elif m["to"] == user_id:
             last_dm[m["sender"]] = m
 
+    all_ids = set(users)
     chats = []
     for uid, u in users.items():
         if uid == user_id:
@@ -346,8 +365,17 @@ def chat_list(user_id: str):
                 "group": False,
                 "last_text": last["text"] if last else "",
                 "last_ts": last["ts"] if last else 0,
+                "last_mine": bool(last and last["sender"] == user_id),
+                "seen": bool(last and last["sender"] == user_id and uid in last.get("seen_by", {})),
             }
         )
+    group_seen = bool(
+        last_group
+        and last_group["sender"] == user_id
+        and all(
+            uid == user_id or uid in last_group.get("seen_by", {}) for uid in all_ids
+        )
+    )
     chats.insert(
         0,
         {
@@ -356,6 +384,8 @@ def chat_list(user_id: str):
             "group": True,
             "last_text": last_group["text"] if last_group else "",
             "last_ts": last_group["ts"] if last_group else 0,
+            "last_mine": bool(last_group and last_group["sender"] == user_id),
+            "seen": group_seen,
         },
     )
     return {"chats": chats}

@@ -36,7 +36,14 @@ function ChatList({ me, onOpen }) {
           </span>
           <span className="chat-item-body">
             <span className="chat-item-name">{c.name}</span>
-            <span className="chat-item-last">{c.last_text || 'Say hi!'}</span>
+            <span className="chat-item-last">
+              {c.last_mine && (
+                <span className={c.seen ? 'ticks seen' : 'ticks'}>
+                  {c.seen ? '✓✓ ' : '✓ '}
+                </span>
+              )}
+              {c.last_text || 'Say hi!'}
+            </span>
           </span>
           {c.last_ts > 0 && <span className="chat-item-time">{fmtTime(c.last_ts)}</span>}
         </button>
@@ -54,7 +61,7 @@ function ChatWindow({ me, chat, onBack }) {
   const refresh = useCallback(async () => {
     try {
       const d = chat.group
-        ? await api.getGroupMessages()
+        ? await api.getGroupMessages(me.id)
         : await api.getDmMessages(chat.id, me.id)
       setMessages(d.messages)
       setError(null)
@@ -109,7 +116,14 @@ function ChatWindow({ me, chat, onBack }) {
               <div className="bubble-sender">{m.sender_name}</div>
             )}
             <div className="bubble-text">{m.text}</div>
-            <div className="bubble-time">{fmtTime(m.ts)}</div>
+            <div className="bubble-time">
+              {fmtTime(m.ts)}
+              {m.sender === me.id && (
+                <span className={m.seen ? 'ticks seen' : 'ticks'}>
+                  {m.seen ? '✓✓' : '✓'}
+                </span>
+              )}
+            </div>
           </div>
         ))}
         {messages.length === 0 && (

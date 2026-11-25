@@ -791,6 +791,16 @@ a {
   margin-top: 2px;
 }
 
+.ticks {
+  margin-left: 4px;
+  font-size: 0.75rem;
+  letter-spacing: -2px;
+}
+
+.ticks.seen {
+  color: #53bdeb;
+}
+
 .composer {
   display: flex;
   gap: 8px;
