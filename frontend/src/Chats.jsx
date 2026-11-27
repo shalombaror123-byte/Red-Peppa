@@ -243,9 +243,13 @@ function ChatWindow({ me, chat, onBack, onCall }) {
   const pickerRef = useRef(null)
   const [recording, setRecording] = useState(false)
   const [recSecs, setRecSecs] = useState(0)
+  const [recBars, setRecBars] = useState([])
   const recRef = useRef(null)
   const recChunks = useRef([])
   const recTimer = useRef(null)
+  const recBarsRef = useRef([])
+  const audioCtxRef = useRef(null)
+  const rafRef = useRef(null)
 
   useEffect(() => {
     if (!pickerOpen) return
@@ -363,6 +367,28 @@ function ChatWindow({ me, chat, onBack, onCall }) {
       rec.start()
       setRecSecs(0)
       recTimer.current = setInterval(() => setRecSecs((s) => s + 1), 1000)
+      // Live mic visualizer — bars move with your voice while recording.
+      const actx = new (window.AudioContext || window.webkitAudioContext)()
+      const analyser = actx.createAnalyser()
+      analyser.fftSize = 256
+      actx.createMediaStreamSource(stream).connect(analyser)
+      audioCtxRef.current = actx
+      recBarsRef.current = new Array(WAVE_BUCKETS).fill(0.08)
+      const buf = new Uint8Array(analyser.frequencyBinCount)
+      const tick = () => {
+        analyser.getByteTimeDomainData(buf)
+        let peak = 0
+        for (let i = 0; i < buf.length; i += 4) {
+          const v = Math.abs(buf[i] - 128) / 128
+          if (v > peak) peak = v
+        }
+        const bars = recBarsRef.current
+        bars.push(Math.min(1, peak * 2.2))
+        if (bars.length > WAVE_BUCKETS) bars.shift()
+        setRecBars([...bars])
+        rafRef.current = requestAnimationFrame(tick)
+      }
+      rafRef.current = requestAnimationFrame(tick)
       setRecording(true)
     } catch {
       setError('Microphone access denied — allow mic to send voice messages')
@@ -373,6 +399,10 @@ function ChatWindow({ me, chat, onBack, onCall }) {
     const rec = recRef.current
     if (!rec) return
     clearInterval(recTimer.current)
+    cancelAnimationFrame(rafRef.current)
+    audioCtxRef.current?.close().catch(() => {})
+    audioCtxRef.current = null
+    setRecBars([])
     rec.onstop = async () => {
       rec.stream.getTracks().forEach((t) => t.stop())
       recRef.current = null
@@ -810,6 +840,15 @@ function ChatWindow({ me, chat, onBack, onCall }) {
             <span className="rec-dot" />
             <span className="rec-time">
               {Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, '0')}
+            </span>
+            <span className="voice-wave rec-wave">
+              {recBars.map((h, i) => (
+                <i
+                  key={i}
+                  className="wbar live"
+                  style={{ height: `${6 + h * 24}px` }}
+                />
+              ))}
             </span>
             <button
               type="button"

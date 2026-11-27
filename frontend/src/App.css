@@ -1614,7 +1614,15 @@ a {
 .rec-time {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  flex-shrink: 0;
+}
+
+.rec-wave {
   flex: 1;
+}
+
+.wbar.live {
+  background: #e5484d;
 }
 
 .bubble-audio {
