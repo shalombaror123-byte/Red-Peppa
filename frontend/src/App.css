@@ -1589,3 +1589,37 @@ a {
   text-decoration: none;
   padding: 4px;
 }
+
+.rec-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+}
+
+.rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: rec-pulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.rec-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  flex: 1;
+}
+
+.bubble-audio {
+  display: block;
+  max-width: 240px;
+  height: 40px;
+  margin-bottom: 4px;
+}

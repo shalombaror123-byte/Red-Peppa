@@ -145,6 +145,11 @@ function ChatWindow({ me, chat, onBack, onCall }) {
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
   const pickerRef = useRef(null)
+  const [recording, setRecording] = useState(false)
+  const [recSecs, setRecSecs] = useState(0)
+  const recRef = useRef(null)
+  const recChunks = useRef([])
+  const recTimer = useRef(null)
 
   useEffect(() => {
     if (!pickerOpen) return
@@ -246,6 +251,65 @@ function ChatWindow({ me, chat, onBack, onCall }) {
       setError(err.message)
       setBusy(false)
     }
+  }
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      })
+      const rec = new MediaRecorder(stream)
+      recChunks.current = []
+      rec.ondataavailable = (e) => {
+        if (e.data.size) recChunks.current.push(e.data)
+      }
+      recRef.current = rec
+      rec.start()
+      setRecSecs(0)
+      recTimer.current = setInterval(() => setRecSecs((s) => s + 1), 1000)
+      setRecording(true)
+    } catch {
+      setError('Microphone access denied — allow mic to send voice messages')
+    }
+  }
+
+  const stopRecording = (sendIt) => {
+    const rec = recRef.current
+    if (!rec) return
+    clearInterval(recTimer.current)
+    rec.onstop = async () => {
+      rec.stream.getTracks().forEach((t) => t.stop())
+      recRef.current = null
+      setRecording(false)
+      const blob = new Blob(recChunks.current, {
+        type: rec.mimeType || 'audio/webm',
+      })
+      recChunks.current = []
+      if (!sendIt || blob.size < 500) return
+      setBusy(true)
+      try {
+        const dataUrl = await new Promise((res, rej) => {
+          const fr = new FileReader()
+          fr.onload = () => res(fr.result)
+          fr.onerror = rej
+          fr.readAsDataURL(blob)
+        })
+        const { id } = await api.uploadMedia(dataUrl)
+        await api.sendMessage({
+          sender: me.id,
+          to: chat.id,
+          text: '',
+          kind: 'audio',
+          media: `media:${id}`,
+        })
+        await refresh()
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setBusy(false)
+      }
+    }
+    rec.stop()
   }
 
   const sendLink = () => {
@@ -500,6 +564,13 @@ function ChatWindow({ me, chat, onBack, onCall }) {
             {m.kind === 'image' && m.media && (
               <img className="bubble-img" src={mediaUrl(m.media)} alt="photo" />
             )}
+            {m.kind === 'audio' && m.media && (
+              <audio
+                className="bubble-audio"
+                controls
+                src={mediaUrl(m.media)}
+              />
+            )}
             {m.kind === 'sticker' ? (
               <div className="bubble-sticker">{m.text}</div>
             ) : (
@@ -640,6 +711,28 @@ function ChatWindow({ me, chat, onBack, onCall }) {
             )}
           </div>
         )}
+        {recording ? (
+          <div className="composer rec-bar">
+            <span className="rec-dot" />
+            <span className="rec-time">
+              {Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, '0')}
+            </span>
+            <button
+              type="button"
+              className="link"
+              onClick={() => stopRecording(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => stopRecording(true)}
+            >
+              Send 🎤
+            </button>
+          </div>
+        ) : (
         <form className="composer" onSubmit={send}>
           <button
             type="button"
@@ -670,6 +763,15 @@ function ChatWindow({ me, chat, onBack, onCall }) {
           >
             GIF
           </button>
+          <button
+            type="button"
+            className="link"
+            onClick={startRecording}
+            aria-label="Record a voice message"
+            disabled={busy}
+          >
+            🎤
+          </button>
         <input
           placeholder="Type a message…"
           value={text}
@@ -696,6 +798,7 @@ function ChatWindow({ me, chat, onBack, onCall }) {
           Send
         </button>
         </form>
+        )}
       </div>
     </div>
   )

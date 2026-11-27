@@ -412,8 +412,13 @@ MEDIA_PREFIX = "red-peppa-media:"
 
 @app.post("/api/media", status_code=201)
 def upload_media(media: MediaIn):
-    if not media.data.startswith("data:image/"):
-        raise HTTPException(status_code=400, detail="Only image data is allowed")
+    if not (
+        media.data.startswith("data:image/")
+        or media.data.startswith("data:audio/")
+    ):
+        raise HTTPException(
+            status_code=400, detail="Only image or audio data is allowed"
+        )
     mid = new_id()
     blob = json.dumps(media.data)
     if USE_KV:
@@ -465,24 +470,30 @@ def send_message(msg: MessageIn):
         if msg.to != "group":
             get_user_or_404(data, msg.to)
         text = msg.text.strip()
-        kind = msg.kind if msg.kind in ("text", "image", "sticker") else "text"
+        kind = (
+            msg.kind
+            if msg.kind in ("text", "image", "sticker", "audio")
+            else "text"
+        )
         media = msg.media.strip()
         if kind in ("text", "sticker") and not text:
             raise HTTPException(status_code=400, detail="Message text is required")
-        if kind == "image" and not (
+        if kind in ("image", "audio") and not (
             media.startswith("media:")
             or media.startswith("http://")
             or media.startswith("https://")
             or media.startswith("/")
         ):
-            raise HTTPException(status_code=400, detail="Image needs a media id or URL")
+            raise HTTPException(
+                status_code=400, detail="Media message needs a media id or URL"
+            )
         record = {
             "id": new_id(),
             "sender": msg.sender,
             "to": msg.to,
             "text": text,
             "kind": kind,
-            "media": media if kind == "image" else "",
+            "media": media if kind in ("image", "audio") else "",
             "reactions": [],  # [{user, emoji}]
             "reply_to": msg.reply_to,
             "ts": now_ts(),
