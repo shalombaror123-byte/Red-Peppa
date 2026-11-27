@@ -209,6 +209,7 @@ class MessageIn(BaseModel):
     text: str = Field(default="", max_length=2000)
     kind: str = Field(default="text", max_length=10)
     media: str = Field(default="", max_length=2000)
+    wave: Optional[list[float]] = None  # amplitude bars for audio messages
     reply_to: Optional[dict] = None  # {name, text} snapshot of quoted message
 
 
@@ -494,6 +495,12 @@ def send_message(msg: MessageIn):
             "text": text,
             "kind": kind,
             "media": media if kind in ("image", "audio") else "",
+            "wave": [
+                max(0.0, min(1.0, float(x)))
+                for x in (msg.wave or [])[:60]
+            ]
+            if kind == "audio"
+            else [],
             "reactions": [],  # [{user, emoji}]
             "reply_to": msg.reply_to,
             "ts": now_ts(),

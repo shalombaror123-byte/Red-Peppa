@@ -15,6 +15,102 @@ const EMOJIS = [
 
 const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
+const WAVE_BUCKETS = 36
+const DEFAULT_WAVE = [
+  0.3, 0.5, 0.7, 0.45, 0.8, 0.6, 0.9, 0.5, 0.35, 0.65, 0.85, 0.4,
+  0.55, 0.75, 0.95, 0.5, 0.3, 0.6, 0.8, 0.45, 0.7, 0.9, 0.55, 0.35,
+  0.6, 0.75, 0.5, 0.85, 0.4, 0.65, 0.8, 0.45, 0.6, 0.5, 0.35, 0.4,
+]
+
+// Turn a recorded blob into ~36 normalized amplitude bars.
+async function blobToWave(blob) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const buf = await ctx.decodeAudioData(await blob.arrayBuffer())
+    const data = buf.getChannelData(0)
+    const step = Math.max(1, Math.floor(data.length / WAVE_BUCKETS))
+    const wave = []
+    for (let i = 0; i < WAVE_BUCKETS; i++) {
+      let peak = 0
+      const end = Math.min((i + 1) * step, data.length)
+      for (let j = i * step; j < end; j += 32) {
+        const v = Math.abs(data[j])
+        if (v > peak) peak = v
+      }
+      wave.push(peak)
+    }
+    ctx.close()
+    const max = Math.max(...wave, 0.01)
+    return wave.map((v) => Math.max(0.08, Math.round((v / max) * 100) / 100))
+  } catch {
+    return []
+  }
+}
+
+function fmtSecs(s) {
+  s = Math.max(0, Math.floor(s || 0))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+function VoiceMsg({ msg }) {
+  const audioRef = useRef(null)
+  const [playing, setPlaying] = useState(false)
+  const [pos, setPos] = useState(0)
+  const [dur, setDur] = useState(0)
+  const wave = msg.wave?.length ? msg.wave : DEFAULT_WAVE
+
+  useEffect(() => {
+    const a = audioRef.current
+    if (!a) return
+    const onTime = () => setPos(a.currentTime)
+    const onMeta = () => setDur(a.duration || 0)
+    const onEnd = () => {
+      setPlaying(false)
+      setPos(0)
+    }
+    a.addEventListener('timeupdate', onTime)
+    a.addEventListener('loadedmetadata', onMeta)
+    a.addEventListener('ended', onEnd)
+    return () => {
+      a.removeEventListener('timeupdate', onTime)
+      a.removeEventListener('loadedmetadata', onMeta)
+      a.removeEventListener('ended', onEnd)
+    }
+  }, [])
+
+  const toggle = () => {
+    const a = audioRef.current
+    if (!a) return
+    if (playing) {
+      a.pause()
+    } else {
+      a.play().catch(() => {})
+    }
+    setPlaying(!playing)
+  }
+
+  const playedBars = dur ? Math.floor((pos / dur) * wave.length) : 0
+
+  return (
+    <div className="voice-msg">
+      <audio ref={audioRef} src={mediaUrl(msg.media)} preload="metadata" />
+      <button type="button" className="voice-play" onClick={toggle}>
+        {playing ? '⏸' : '▶'}
+      </button>
+      <span className="voice-wave">
+        {wave.map((h, i) => (
+          <i
+            key={i}
+            className={i < playedBars ? 'wbar played' : 'wbar'}
+            style={{ height: `${6 + h * 24}px` }}
+          />
+        ))}
+      </span>
+      <span className="voice-dur">{fmtSecs(playing ? pos : dur)}</span>
+    </div>
+  )
+}
+
 const GIFS = [
   'mindblown', 'facepalm', 'pulpfiction', 'surprised-pikachu', 'homerbush',
   'nod', 'hellno', 'nope', 'nopesimpsons', 'notsure', 'woohoo',
@@ -288,12 +384,15 @@ function ChatWindow({ me, chat, onBack, onCall }) {
       if (!sendIt || blob.size < 500) return
       setBusy(true)
       try {
-        const dataUrl = await new Promise((res, rej) => {
-          const fr = new FileReader()
-          fr.onload = () => res(fr.result)
-          fr.onerror = rej
-          fr.readAsDataURL(blob)
-        })
+        const [dataUrl, wave] = await Promise.all([
+          new Promise((res, rej) => {
+            const fr = new FileReader()
+            fr.onload = () => res(fr.result)
+            fr.onerror = rej
+            fr.readAsDataURL(blob)
+          }),
+          blobToWave(blob),
+        ])
         const { id } = await api.uploadMedia(dataUrl)
         await api.sendMessage({
           sender: me.id,
@@ -301,6 +400,7 @@ function ChatWindow({ me, chat, onBack, onCall }) {
           text: '',
           kind: 'audio',
           media: `media:${id}`,
+          wave,
         })
         await refresh()
       } catch (err) {
@@ -564,13 +664,7 @@ function ChatWindow({ me, chat, onBack, onCall }) {
             {m.kind === 'image' && m.media && (
               <img className="bubble-img" src={mediaUrl(m.media)} alt="photo" />
             )}
-            {m.kind === 'audio' && m.media && (
-              <audio
-                className="bubble-audio"
-                controls
-                src={mediaUrl(m.media)}
-              />
-            )}
+            {m.kind === 'audio' && m.media && <VoiceMsg msg={m} />}
             {m.kind === 'sticker' ? (
               <div className="bubble-sticker">{m.text}</div>
             ) : (

@@ -1623,3 +1623,69 @@ a {
   height: 40px;
   margin-bottom: 4px;
 }
+
+.voice-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 210px;
+  padding: 2px 0;
+}
+
+.voice-play {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgb(255 255 255 / 92%);
+  color: #8c1f28;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.voice-wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  height: 30px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wbar {
+  width: 3px;
+  min-width: 2px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 40%);
+  display: block;
+}
+
+.bubble:not(.mine) .wbar {
+  background: var(--muted);
+  opacity: 0.55;
+}
+
+.wbar.played {
+  background: #fff;
+}
+
+.bubble:not(.mine) .wbar.played {
+  background: #ff7a5c;
+  opacity: 1;
+}
+
+.voice-dur {
+  font-size: 0.72rem;
+  color: rgb(255 255 255 / 75%);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.bubble:not(.mine) .voice-dur {
+  color: var(--muted);
+}
