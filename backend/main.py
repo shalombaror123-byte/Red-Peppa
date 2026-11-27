@@ -1049,6 +1049,7 @@ class ReportIn(BaseModel):
 class ResolveIn(BaseModel):
     me: str
     action: str = "dismiss"  # dismiss | warn | ban2h | ban
+    warn: bool = False  # legacy field from older clients
     text: str = Field(default="", max_length=500)
 
 
@@ -1112,8 +1113,11 @@ def resolve_report(report_id: str, body: ResolveIn):
         if rep is None:
             raise HTTPException(status_code=404, detail="Report not found")
         rep["status"] = "resolved"
-        target = get_user_or_404(data, rep["reported"])
-        if body.action == "warn":
+        action = "warn" if body.action == "dismiss" and body.warn else body.action
+        target = next(
+            (u for u in data["users"] if u["id"] == rep["reported"]), None
+        )
+        if action == "warn" and target:
             data["warnings"].append(
                 {
                     "id": new_id(),
@@ -1124,9 +1128,9 @@ def resolve_report(report_id: str, body: ResolveIn):
                     "seen": False,
                 }
             )
-        elif body.action == "ban2h":
+        elif action == "ban2h" and target:
             target["banned_until"] = now_ts() + 7200
-        elif body.action == "ban":
+        elif action == "ban" and target:
             target["banned_until"] = -1
         save_data(data)
     return {"ok": True}
