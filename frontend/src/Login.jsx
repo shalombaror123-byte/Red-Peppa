@@ -12,6 +12,7 @@ export default function Login({ users, error, onLogin, onRefresh, footer }) {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [birthday, setBirthday] = useState('')
+  const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState(null)
 
@@ -53,6 +54,7 @@ export default function Login({ users, error, onLogin, onRefresh, footer }) {
         phone: phone.trim(),
         email: email.trim(),
         birthday: birthday.trim(),
+        code: code.trim(),
       })
       onLogin(user)
     } catch (err) {
@@ -161,6 +163,11 @@ export default function Login({ users, error, onLogin, onRefresh, footer }) {
               required
             />
           </label>
+          <input
+            placeholder="Class code (ask an admin)"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
           <button className="primary" type="submit" disabled={busy}>
             {busy ? 'Joining…' : 'Join the class'}
           </button>

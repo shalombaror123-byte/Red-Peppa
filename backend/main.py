@@ -80,6 +80,8 @@ EMPTY_DATA = {
     "reports": [],    # {id, reporter, reported, message_id, message_text, ts, status}
     "warnings": [],   # {id, user, text, ts, seen}
     "typing": {},     # {chat_id: {user_id: ts}}
+    "blocked_names": [],  # names that can't sign up again
+    "signup_code": "",    # when set, new signups must supply it
 }
 
 
@@ -188,6 +190,7 @@ class UserIn(BaseModel):
     phone: str = Field(min_length=1, max_length=30)
     email: str = Field(min_length=1, max_length=120)
     birthday: str = Field(min_length=1, max_length=10)  # "MM-DD"
+    code: Optional[str] = Field(default=None, max_length=40)
 
 
 class UserUpdate(BaseModel):
@@ -259,6 +262,15 @@ def create_user(user: UserIn):
     with _lock:
         data = load_data()
         name = user.name.strip()
+        if name.lower() in {n.lower() for n in data.get("blocked_names", [])}:
+            raise HTTPException(
+                status_code=403, detail="That name can't be used"
+            )
+        required = data.get("signup_code", "")
+        if required and (user.code or "").strip() != required:
+            raise HTTPException(
+                status_code=403, detail="Wrong class code — ask the admin for it"
+            )
         if any(u["name"].lower() == name.lower() for u in data["users"]):
             raise HTTPException(status_code=409, detail="That name is already taken")
         if user.birthday:
@@ -1165,6 +1177,43 @@ def unban_user(user_id: str, body: UnbanIn):
         get_admin_or_403(data, body.me)
         u = get_user_or_404(data, user_id)
         u["banned_until"] = 0
+        save_data(data)
+    return {"ok": True}
+
+
+class AdminSettingsIn(BaseModel):
+    me: str
+    signup_code: Optional[str] = Field(default=None, max_length=40)
+
+
+@app.post("/api/admin/settings")
+def admin_settings(body: AdminSettingsIn):
+    with _lock:
+        data = load_data()
+        get_admin_or_403(data, body.me)
+        if body.signup_code is not None:
+            data["signup_code"] = body.signup_code.strip()
+        save_data(data)
+    return {"ok": True}
+
+
+class BlockNameIn(BaseModel):
+    me: str
+    name: str = Field(min_length=1, max_length=60)
+    blocked: bool = True
+
+
+@app.post("/api/admin/block-name")
+def block_name(body: BlockNameIn):
+    with _lock:
+        data = load_data()
+        get_admin_or_403(data, body.me)
+        names = data.setdefault("blocked_names", [])
+        key = body.name.strip().lower()
+        if body.blocked and key not in {n.lower() for n in names}:
+            names.append(body.name.strip())
+        if not body.blocked:
+            names[:] = [n for n in names if n.lower() != key]
         save_data(data)
     return {"ok": True}
 
